@@ -425,21 +425,21 @@ CSS = f"""
   color: white; padding: 18px 22px; border-radius: 18px;
   box-shadow: 0 8px 24px rgba(0,0,0,.12);
 }}
-.card {{border:1px solid #e6e6e6; padding:1rem; border-radius:16px; box-shadow:0 1px 2px rgba(0,0,0,.06);}}
-.badge {{display:inline-block; padding:.25rem .6rem; margin:.2rem; border-radius:999px; background:{P['chip']}; font-size:.85rem}}
-.kicker {{opacity:.9; font-size:.95rem; margin-bottom:.25rem}}
-.h2 {{font-weight:800; font-size:1.35rem; margin:.25rem 0 .5rem}}
-.small {{opacity:.9; font-size:.9rem}}
-.primary {{color:{P['accent']}; font-weight:700}}
-.subcap {{color:#6b7280; font-size:.9rem; margin-top:.25rem}}
-.btncopy {{background:{P['accent']}; color:white; border:none; border-radius:10px; padding:.35rem .6rem; font-size:.85rem; cursor:pointer;}}
-.btncopy:hover {{opacity:.95}}
-.textarea {width:100%; resize:vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; padding:.85rem 1rem; border-radius:12px; border:1px solid #e5e7eb; background:#ffffff; min-height:160px; font-size:15px; line-height:1.45; box-shadow: inset 0 1px 2px rgba(0,0,0,.04);} 
-.textarea:focus {outline:none; border-color:#a5b4fc; box-shadow: 0 0 0 3px rgba(99,102,241,.15);} }
-.blocktitle {{font-weight:700; margin-bottom:.4rem}}
-.grid {{display:grid; grid-template-columns: 1fr 1fr; gap: 14px;}}
-.grid-full {{display:grid; grid-template-columns: 1fr; gap: 14px;}}
-.cardlite {border:1px solid #eaeaea; padding:1rem; border-radius:14px; background: linear-gradient(180deg,#ffffff,#f9fafb); box-shadow: 0 6px 18px rgba(0,0,0,.06);} }
+.card {{ border:1px solid #e6e6e6; padding:1rem; border-radius:16px; box-shadow:0 1px 2px rgba(0,0,0,.06); }}
+.badge {{ display:inline-block; padding:.25rem .6rem; margin:.2rem; border-radius:999px; background:{P['chip']}; font-size:.85rem }}
+.kicker {{ opacity:.9; font-size:.95rem; margin-bottom:.25rem }}
+.h2 {{ font-weight:800; font-size:1.35rem; margin:.25rem 0 .5rem }}
+.small {{ opacity:.9; font-size:.9rem }}
+.primary {{ color:{P['accent']}; font-weight:700 }}
+.subcap {{ color:#6b7280; font-size:.9rem; margin-top:.25rem }}
+.btncopy {{ background:{P['accent']}; color:white; border:none; border-radius:10px; padding:.35rem .6rem; font-size:.85rem; cursor:pointer; }}
+.btncopy:hover {{ opacity:.95 }}
+.textarea {{ width:100%; resize:vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; padding:.85rem 1rem; border-radius:12px; border:1px solid #e5e7eb; background:#ffffff; min-height:160px; font-size:15px; line-height:1.45; box-shadow: inset 0 1px 2px rgba(0,0,0,.04); }} 
+.textarea:focus {{ outline:none; border-color:#a5b4fc; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }}
+.blocktitle {{ font-weight:700; margin-bottom:.4rem }}
+.grid {{ display:grid; grid-template-columns: 1fr 1fr; gap: 14px; }}
+.grid-full {{ display:grid; grid-template-columns: 1fr; gap: 14px; }}
+.cardlite {{ border:1px solid #eaeaea; padding:1rem; border-radius:14px; background: linear-gradient(180deg,#ffffff,#f9fafb); box-shadow: 0 6px 18px rgba(0,0,0,.06); }}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
