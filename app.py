@@ -386,9 +386,12 @@ def _html_escape(s: str) -> str:
 
 def copy_card(title: str, value: str, key: str, rows_hint: int = 4):
     value = _html_escape(value or "")
-    # Estimate rows from content length
-    est = max(rows_hint, min(12, value.count("
-") + value.count(" OR ") // 3 + value.count(",") // 12 + 3))
+    # Estimate rows from content structure (fixes unterminated string error)
+    lines = value.count("
+") + 1
+    ors = value.count(" OR ")
+    commas = value.count(",")
+    est = max(rows_hint, min(12, max(lines, (ors // 3) + (commas // 12) + 3)))
     html = f"""
     <div class='cardlite'>
       <div style='display:flex;justify-content:space-between;align-items:center;'>
