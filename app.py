@@ -554,7 +554,7 @@ if st.button("✨ Build sourcing pack", type="primary"):
             st.markdown("</div>", unsafe_allow_html=True)
 
         # Copy All bundle at the bottom
-        copy_all = f"Title (Current):
+        copy_all = f"""Title (Current):
 {li_title}
 
 Title (Extended):
@@ -567,7 +567,8 @@ Keywords (Expanded):
 {expanded_keywords}
 
 Skills (All CSV):
-{skills_all_csv}"
+{skills_all_csv}
+"""
         st.markdown("<div class='grid-full'>", unsafe_allow_html=True)
         copy_card("Copy All — Titles + Keywords + Skills", copy_all, "copy_all_bundle", 14)
         st.markdown("</div>", unsafe_allow_html=True)
