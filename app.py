@@ -233,34 +233,34 @@ SMART_EXCLUDE_BASE = [
 def map_title_to_category(title: str) -> str:
     t = (title or "").lower()
     # Strong keyword checks
-    if any(k in t for k in ["sre", "site reliability", "production engineering"]):
+    if any(k in t for k in ["sre", "site reliability", "production engineering", "production engineer", "reliability engineer"]):
         return "sre"
-    if any(k in t for k in ["ml ", "machine learning", "applied scientist", "llm"]):
+    if any(k in t for k in ["ml ", "machine learning", "applied scientist", "llm", "data scientist", "computer vision", "nlp"]):
         return "ml"
-    if any(k in t for k in ["data engineer", "analytics engineer"]):
+    if any(k in t for k in ["data engineer", "analytics engineer", "etl engineer", "data platform"]):
         return "data_eng"
-    if any(k in t for k in ["data analyst", "bi analyst", "product analyst"]):
+    if any(k in t for k in ["data analyst", "bi analyst", "product analyst", "growth analyst", "business analyst"]):
         return "data_analyst"
-    if any(k in t for k in ["frontend", "front end", "ui engineer", "react"]):
+    if any(k in t for k in ["frontend", "front end", "ui engineer", "react", "web engineer", "ui developer", "web developer"]):
         return "frontend"
-    if any(k in t for k in ["backend", "distributed systems", "api engineer"]):
+    if any(k in t for k in ["backend", "back end", "distributed systems", "api engineer", "services engineer"]):
         return "backend"
-    if any(k in t for k in ["ios", "swift"]):
+    if any(k in t for k in ["ios", "swift", "iphone"]):
         return "mobile_ios"
     if any(k in t for k in ["android", "kotlin"]):
         return "mobile_android"
-    if any(k in t for k in ["devops", "platform engineer", "infrastructure engineer"]):
+    if any(k in t for k in ["devops", "platform engineer", "infrastructure engineer", "cloud engineer", "build engineer", "release engineer"]):
         return "devops"
-    if any(k in t for k in ["security engineer", "appsec", "product security"]):
+    if any(k in t for k in ["security engineer", "appsec", "product security", "cloud security", "security architect"]):
         return "security"
-    if any(k in t for k in ["solutions architect", "sales engineer", "solutions engineer"]):
+    if any(k in t for k in ["solutions architect", "sales engineer", "solutions engineer", "solutions consultant", "customer engineer"]):
         return "solutions_arch"
-    if any(k in t for k in ["product manager", "gpm", "principal product manager"]):
+    if any(k in t for k in ["product manager", "gpm", "principal product manager", "product owner", "tpm", "program manager"]):
         return "pm"
-    if any(k in t for k in ["designer", "ux", "ui", "interaction designer"]):
+    if any(k in t for k in ["designer", "ux", "ui", "interaction designer", "product designer"]):
         return "design"
     # Generic SWE fallback
-    if any(k in t for k in ["engineer", "developer", "software"]):
+    if any(k in t for k in ["engineer", "developer", "software", "programmer", "coder", "full stack", "full-stack", "fullstack"]):
         return "swe"
     # Default to PM as a neutral non‑coding role
     return "pm"
@@ -273,19 +273,19 @@ def or_group(items: List[str]) -> str:
 
 def title_abbrevs_for(cat: str) -> List[str]:
     if cat in ["swe", "backend", "frontend", "devops", "sre"]:
-        return ["SWE", "Software Eng", "Software Dev", "SDE", "SDE II", "SDE2", "Sr Software Engineer", "Staff Software Engineer", "Principal Software Engineer"]
+        return ["SWE", "Software Eng", "Software Dev", "SDE", "SDE I", "SDE II", "SDE2", "Sr Software Engineer", "Staff Software Engineer", "Principal Software Engineer", "Full-Stack Engineer", "Fullstack Engineer"]
     if cat == "ml":
-        return ["ML Engineer", "Machine Learning Eng", "Applied Scientist", "AI Engineer"]
+        return ["ML Engineer", "Machine Learning Eng", "Applied Scientist", "AI Engineer", "Data Scientist", "NLP Engineer", "Computer Vision Engineer"]
     if cat == "data_eng":
-        return ["Data Platform Engineer", "Analytics Engineer", "Data Infrastructure Engineer"]
+        return ["Data Platform Engineer", "Analytics Engineer", "ETL Engineer", "Data Infrastructure Engineer"]
     if cat == "security":
-        return ["AppSec Engineer", "Product Security Engineer", "Security Software Engineer"]
+        return ["AppSec Engineer", "Product Security Engineer", "Security Software Engineer", "Cloud Security Engineer"]
     if cat == "design":
         return ["UI/UX Designer", "UX/UI Designer", "Interaction Designer", "Product Designer"]
     if cat == "pm":
-        return ["PM", "Sr Product Manager", "Principal PM", "Group PM"]
+        return ["PM", "Sr Product Manager", "Principal PM", "Group PM", "Product Owner", "Technical Program Manager"]
     if cat == "solutions_arch":
-        return ["Solutions Architect", "Solutions Engineer", "Sales Engineer"]
+        return ["Solutions Architect", "Solutions Engineer", "Sales Engineer", "Customer Engineer", "Solutions Consultant"]
     return []
 
 
@@ -330,6 +330,79 @@ def confidence_score(titles: List[str], must: List[str], nice: List[str]) -> int
         score -= 5
     return max(10, min(100, score))
 
+# -------- Wider‑net fuzzy mapping (no regex in strings to keep deployment simple) --------
+from difflib import SequenceMatcher
+
+EXTRA_ALIASES = {
+    "swe": ["Software Programmer", "Programmer", "Software Dev", "Full Stack Developer", "Backend Developer", "Frontend Developer", "Platform Software Engineer"],
+    "frontend": ["Front-End Engineer", "UI Developer", "Web Developer", "React Developer", "Angular Developer"],
+    "backend": ["Back-End Engineer", "API Developer", "Services Engineer", "Platform Backend Engineer"],
+    "mobile_ios": ["iOS Software Engineer", "iOS Developer", "iPhone Developer"],
+    "mobile_android": ["Android Software Engineer", "Android Developer"],
+    "ml": ["ML Scientist", "Machine Learning Scientist", "AI Scientist", "NLP Scientist", "CV Engineer"],
+    "data_eng": ["ETL Developer", "Data Pipeline Engineer", "Big Data Engineer", "Data Infrastructure"],
+    "data_analyst": ["Growth Analyst", "Product Data Analyst", "BI Developer"],
+    "pm": ["Product Owner", "TPM", "Technical Program Manager", "Program Manager"],
+    "design": ["UX/UI Designer", "Product Design", "Interaction Designer"],
+    "sre": ["Production Engineer", "Reliability Engineer", "DevOps SRE", "Systems Reliability Engineer"],
+    "devops": ["Cloud Engineer", "Infrastructure Engineer", "Build Engineer", "Release Engineer", "Platform Engineer (DevOps)"],
+    "security": ["Application Security Engineer", "Product Security Engineer", "Cloud Security Engineer"],
+    "solutions_arch": ["Solutions Consultant", "Sales Engineer", "Customer Engineer", "Field Engineer"],
+}
+
+
+def _normalize_title(s: str) -> str:
+    s = (s or "").lower()
+    # strip common seniority tokens
+    for w in [" sr ", " senior ", " staff ", " principal ", " lead ", " junior ", " ii ", " iii ", " iv ", " i "]:
+        s = s.replace(w, " ")
+    # keep only letters and spaces
+    cleaned = []
+    for ch in s:
+        if ch.isalpha() or ch.isspace():
+            cleaned.append(ch)
+        else:
+            cleaned.append(" ")
+    s = "".join(cleaned)
+    while "  " in s:
+        s = s.replace("  ", " ")
+    return s.strip()
+
+
+def _all_aliases_for(cat: str) -> List[str]:
+    base = ROLE_LIB.get(cat, {}).get("titles", [])
+    return base + title_abbrevs_for(cat) + EXTRA_ALIASES.get(cat, [])
+
+
+def guess_category_fuzzy(title: str) -> str:
+    tnorm = _normalize_title(title)
+    best_cat, best_score = None, 0.0
+    for cat in ROLE_LIB.keys():
+        for alias in _all_aliases_for(cat):
+            score = SequenceMatcher(None, tnorm, _normalize_title(alias)).ratio()
+            if score > best_score:
+                best_score, best_cat = score, cat
+    if best_score >= 0.42:
+        return best_cat
+    # Token overlap fallback
+    tokens = set(tnorm.split())
+    best_cat2, best_overlap = None, -1
+    for cat in ROLE_LIB.keys():
+        alias_tokens = set()
+        for alias in _all_aliases_for(cat):
+            alias_tokens.update(_normalize_title(alias).split())
+        overlap = len(tokens & alias_tokens)
+        if overlap > best_overlap:
+            best_overlap, best_cat2 = overlap, cat
+    return best_cat2 or "pm"
+
+
+def map_title_to_category_any(title: str) -> str:
+    primary = map_title_to_category(title)
+    if primary == "pm" and title:
+        return guess_category_fuzzy(title)
+    return primary
+
 # ============================= Theming =============================
 PALETTES = {
     "Indigo → Pink": {"bg":"linear-gradient(90deg,#4f46e5,#db2777)", "chip":"#eef2ff", "accent":"#4f46e5"},
@@ -361,11 +434,12 @@ CSS = f"""
 .subcap {{color:#6b7280; font-size:.9rem; margin-top:.25rem}}
 .btncopy {{background:{P['accent']}; color:white; border:none; border-radius:10px; padding:.35rem .6rem; font-size:.85rem; cursor:pointer;}}
 .btncopy:hover {{opacity:.95}}
-.textarea {{width:100%; resize:vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; padding:.6rem; border-radius:10px; border:1px solid #e5e7eb; background:#fff;}}
+.textarea {width:100%; resize:vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; padding:.85rem 1rem; border-radius:12px; border:1px solid #e5e7eb; background:#ffffff; min-height:160px; font-size:15px; line-height:1.45; box-shadow: inset 0 1px 2px rgba(0,0,0,.04);} 
+.textarea:focus {outline:none; border-color:#a5b4fc; box-shadow: 0 0 0 3px rgba(99,102,241,.15);} }
 .blocktitle {{font-weight:700; margin-bottom:.4rem}}
 .grid {{display:grid; grid-template-columns: 1fr 1fr; gap: 14px;}}
 .grid-full {{display:grid; grid-template-columns: 1fr; gap: 14px;}}
-.cardlite {{border:1px solid #eee; padding:.75rem; border-radius:12px; background: #fafafa;}}
+.cardlite {border:1px solid #eaeaea; padding:1rem; border-radius:14px; background: linear-gradient(180deg,#ffffff,#f9fafb); box-shadow: 0 6px 18px rgba(0,0,0,.06);} }
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -384,13 +458,14 @@ def _html_escape(s: str) -> str:
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def copy_card(title: str, value: str, key: str, rows_hint: int = 4):
+def copy_card(title: str, value: str, key: str, rows_hint: int = 8):
     value = _html_escape(value or "")
-    # Estimate rows from content structure (avoid string literal issues)
+    # Bigger, prettier boxes — estimate rows generously
     lines = max(1, len(value.splitlines()))
     ors = value.count(" OR ")
     commas = value.count(",")
-    est = max(rows_hint, min(12, max(lines, (ors // 3) + (commas // 12) + 3)))
+    longness = max(lines, (ors // 2) + (commas // 10) + 5)
+    est = max(rows_hint, min(20, longness))
     html = f"""
     <div class='cardlite'>
       <div style='display:flex;justify-content:space-between;align-items:center;'>
@@ -400,8 +475,8 @@ def copy_card(title: str, value: str, key: str, rows_hint: int = 4):
       <textarea id='{key}' class='textarea' rows='{est}'>{value}</textarea>
     </div>
     """
-    # Height: approx row height 24px + padding
-    components.html(html, height=est * 26 + 80)
+    # Height: roomier visuals
+    components.html(html, height=est * 32 + 120)
 
 st.write("")
 colA, colB, colC = st.columns([3,2,2])
@@ -416,7 +491,7 @@ extra_not = st.text_input("Custom NOT terms (comma‑separated)", placeholder="e
 extra_not_list = [t.strip() for t in extra_not.split(",") if t.strip()]
 
 if st.button("✨ Build sourcing pack", type="primary"):
-    cat = map_title_to_category(any_title)
+    cat = map_title_to_category_any(any_title)
     R = ROLE_LIB[cat]
 
     base_titles = R["titles"]
@@ -454,29 +529,48 @@ if st.button("✨ Build sourcing pack", type="primary"):
         grid1 = st.container()
         with grid1:
             st.markdown("<div class='grid'>", unsafe_allow_html=True)
-            copy_card("LinkedIn — Title (Current)", li_title, "copy_title_current", 4)
-            copy_card("LinkedIn — Title (Current) — Extended synonyms", ext_title, "copy_title_extended", 4)
+            copy_card("LinkedIn — Title (Current)", li_title, "copy_title_current", 10)
+            copy_card("LinkedIn — Title (Current) — Extended synonyms", ext_title, "copy_title_extended", 10)
             st.markdown("</div>", unsafe_allow_html=True)
 
         grid2 = st.container()
         with grid2:
             st.markdown("<div class='grid'>", unsafe_allow_html=True)
-            copy_card("LinkedIn — Keywords (Core)", li_keywords, "copy_kw_core", 5)
-            copy_card("LinkedIn — Keywords (Expanded)", expanded_keywords, "copy_kw_expanded", 5)
+            copy_card("LinkedIn — Keywords (Core)", li_keywords, "copy_kw_core", 12)
+            copy_card("LinkedIn — Keywords (Expanded)", expanded_keywords, "copy_kw_expanded", 12)
             st.markdown("</div>", unsafe_allow_html=True)
 
         grid3 = st.container()
         with grid3:
             st.markdown("<div class='grid'>", unsafe_allow_html=True)
-            copy_card("LinkedIn — Skills (Must, CSV)", skills_must_csv, "copy_sk_must", 3)
-            copy_card("LinkedIn — Skills (Nice‑to‑have, CSV)", skills_nice_csv, "copy_sk_nice", 3)
+            copy_card("LinkedIn — Skills (Must, CSV)", skills_must_csv, "copy_sk_must", 8)
+            copy_card("LinkedIn — Skills (Nice‑to‑have, CSV)", skills_nice_csv, "copy_sk_nice", 8)
             st.markdown("</div>", unsafe_allow_html=True)
 
         grid4 = st.container()
         with grid4:
             st.markdown("<div class='grid-full'>", unsafe_allow_html=True)
-            copy_card("LinkedIn — Skills (All, CSV)", skills_all_csv, "copy_sk_all", 3)
+            copy_card("LinkedIn — Skills (All, CSV)", skills_all_csv, "copy_sk_all", 10)
             st.markdown("</div>", unsafe_allow_html=True)
+
+        # Copy All bundle at the bottom
+        copy_all = f"Title (Current):
+{li_title}
+
+Title (Extended):
+{ext_title}
+
+Keywords (Core):
+{li_keywords}
+
+Keywords (Expanded):
+{expanded_keywords}
+
+Skills (All CSV):
+{skills_all_csv}"
+        st.markdown("<div class='grid-full'>", unsafe_allow_html=True)
+        copy_card("Copy All — Titles + Keywords + Skills", copy_all, "copy_all_bundle", 14)
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # -------------------- Tab 2: Role Intel --------------------
     with tabs[1]:
