@@ -507,8 +507,7 @@ if st.button("✨ Build sourcing pack", type="primary"):
 
     # Outreach
     with tabs[5]:
-        st.markdown("**Angles that resonate** (keep 1 short CTA)
-", unsafe_allow_html=False)
+        st.markdown("**Angles that resonate** (keep 1 short CTA)", unsafe_allow_html=False)
         hooks = []
         cat_icons = {"swe":"🧱","frontend":"🎨","backend":"🧩","mobile_ios":"📱","mobile_android":"🤖","ml":"🧪","data_eng":"🗄️","data_analyst":"📊","pm":"🧭","design":"✏️","sre":"🚦","devops":"⚙️","security":"🛡️","solutions_arch":"🧰"}
         icon = cat_icons.get(cat, "✨")
