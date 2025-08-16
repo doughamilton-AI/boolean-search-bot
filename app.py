@@ -643,3 +643,4 @@ TEAM NAMES:
 
 else:
     st.info("Type **any job title**, optionally add a location and custom NOT terms, pick a seniority bias, then click **Build sourcing pack**.")
+
