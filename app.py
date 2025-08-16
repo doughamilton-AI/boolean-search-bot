@@ -386,9 +386,8 @@ def _html_escape(s: str) -> str:
 
 def copy_card(title: str, value: str, key: str, rows_hint: int = 4):
     value = _html_escape(value or "")
-    # Estimate rows from content structure (fixes unterminated string error)
-    lines = value.count("
-") + 1
+    # Estimate rows from content structure (avoid string literal issues)
+    lines = max(1, len(value.splitlines()))
     ors = value.count(" OR ")
     commas = value.count(",")
     est = max(rows_hint, min(12, max(lines, (ors // 3) + (commas // 12) + 3)))
@@ -396,7 +395,7 @@ def copy_card(title: str, value: str, key: str, rows_hint: int = 4):
     <div class='cardlite'>
       <div style='display:flex;justify-content:space-between;align-items:center;'>
         <div class='blocktitle'>{title}</div>
-        <button class='btncopy' onclick="navigator.clipboard.writeText(document.getElementById('{key}').value)">Copy</button>
+        <button class='btncopy' onclick=\"navigator.clipboard.writeText(document.getElementById('{key}').value)\">Copy</button>
       </div>
       <textarea id='{key}' class='textarea' rows='{est}'>{value}</textarea>
     </div>
