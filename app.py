@@ -18,6 +18,7 @@ No external APIs; safe for Streamlit Cloud. Ethical sourcing only — focus on s
 
 import re
 import streamlit as st
+import streamlit.components.v1 as components
 from typing import List, Dict
 
 # ============================= Role Library =============================
@@ -358,6 +359,13 @@ CSS = f"""
 .small {{opacity:.9; font-size:.9rem}}
 .primary {{color:{P['accent']}; font-weight:700}}
 .subcap {{color:#6b7280; font-size:.9rem; margin-top:.25rem}}
+.btncopy {{background:{P['accent']}; color:white; border:none; border-radius:10px; padding:.35rem .6rem; font-size:.85rem; cursor:pointer;}}
+.btncopy:hover {{opacity:.95}}
+.textarea {{width:100%; resize:vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; padding:.6rem; border-radius:10px; border:1px solid #e5e7eb; background:#fff;}}
+.blocktitle {{font-weight:700; margin-bottom:.4rem}}
+.grid {{display:grid; grid-template-columns: 1fr 1fr; gap: 14px;}}
+.grid-full {{display:grid; grid-template-columns: 1fr; gap: 14px;}}
+.cardlite {{border:1px solid #eee; padding:.75rem; border-radius:12px; background: #fafafa;}}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -369,6 +377,29 @@ st.markdown("""
   <div class="small">Paste results into LinkedIn. Boolean Pack now focuses on **Titles, Keywords, and Skills** for quick copy.</div>
 </div>
 """, unsafe_allow_html=True)
+
+# ---------- Tiny HTML copy card helper ----------
+
+def _html_escape(s: str) -> str:
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def copy_card(title: str, value: str, key: str, rows_hint: int = 4):
+    value = _html_escape(value or "")
+    # Estimate rows from content length
+    est = max(rows_hint, min(12, value.count("
+") + value.count(" OR ") // 3 + value.count(",") // 12 + 3))
+    html = f"""
+    <div class='cardlite'>
+      <div style='display:flex;justify-content:space-between;align-items:center;'>
+        <div class='blocktitle'>{title}</div>
+        <button class='btncopy' onclick="navigator.clipboard.writeText(document.getElementById('{key}').value)">Copy</button>
+      </div>
+      <textarea id='{key}' class='textarea' rows='{est}'>{value}</textarea>
+    </div>
+    """
+    # Height: approx row height 24px + padding
+    components.html(html, height=est * 26 + 80)
 
 st.write("")
 colA, colB, colC = st.columns([3,2,2])
@@ -416,30 +447,34 @@ if st.button("✨ Build sourcing pack", type="primary"):
 
     # -------------------- Tab 1: Boolean Pack (Titles, Keywords, Skills only) --------------------
     with tabs[0]:
-        st.markdown("**LinkedIn — Title (Current)**")
-        st.code(li_title, language="text")
-        st.text_input("Copy Title (Current)", value=li_title, label_visibility="collapsed")
+        # Organized grid layout with tiny copy buttons
+        ext_title = or_group(titles[:20])
+        grid1 = st.container()
+        with grid1:
+            st.markdown("<div class='grid'>", unsafe_allow_html=True)
+            copy_card("LinkedIn — Title (Current)", li_title, "copy_title_current", 4)
+            copy_card("LinkedIn — Title (Current) — Extended synonyms", ext_title, "copy_title_extended", 4)
+            st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown("**LinkedIn — Title (Current) — Extended synonyms**")
-        st.code(or_group(titles[:20]), language="text")
-        st.text_input("Copy Extended Title", value=or_group(titles[:20]), label_visibility="collapsed")
+        grid2 = st.container()
+        with grid2:
+            st.markdown("<div class='grid'>", unsafe_allow_html=True)
+            copy_card("LinkedIn — Keywords (Core)", li_keywords, "copy_kw_core", 5)
+            copy_card("LinkedIn — Keywords (Expanded)", expanded_keywords, "copy_kw_expanded", 5)
+            st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown("**LinkedIn — Keywords (Core)**")
-        st.code(li_keywords, language="text")
-        st.text_input("Copy Keywords (Core)", value=li_keywords, label_visibility="collapsed")
+        grid3 = st.container()
+        with grid3:
+            st.markdown("<div class='grid'>", unsafe_allow_html=True)
+            copy_card("LinkedIn — Skills (Must, CSV)", skills_must_csv, "copy_sk_must", 3)
+            copy_card("LinkedIn — Skills (Nice‑to‑have, CSV)", skills_nice_csv, "copy_sk_nice", 3)
+            st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown("**LinkedIn — Keywords (Expanded)**")
-        st.code(expanded_keywords, language="text")
-        st.text_input("Copy Keywords (Expanded)", value=expanded_keywords, label_visibility="collapsed")
-
-        st.markdown("**LinkedIn — Skills (Must, comma‑separated)**")
-        st.text_input("Copy Skills (Must)", value=skills_must_csv, label_visibility="collapsed")
-
-        st.markdown("**LinkedIn — Skills (Nice‑to‑have, comma‑separated)**")
-        st.text_input("Copy Skills (Nice‑to‑have)", value=skills_nice_csv, label_visibility="collapsed")
-
-        st.markdown("**LinkedIn — Skills (All, comma‑separated)**")
-        st.text_input("Copy Skills (All)", value=skills_all_csv, label_visibility="collapsed")
+        grid4 = st.container()
+        with grid4:
+            st.markdown("<div class='grid-full'>", unsafe_allow_html=True)
+            copy_card("LinkedIn — Skills (All, CSV)", skills_all_csv, "copy_sk_all", 3)
+            st.markdown("</div>", unsafe_allow_html=True)
 
     # -------------------- Tab 2: Role Intel --------------------
     with tabs[1]:
