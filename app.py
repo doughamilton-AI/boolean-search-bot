@@ -1,11 +1,11 @@
-# Ai Sourcing Assistant — Pro Recruiter Toolkit (Any Title, Colorful UX)
+# Ai Sourcing Assistant — Pro Recruiter Toolkit (Any Title, Colorful UX, Rich Boolean Pack)
 
 """
 A colorful, senior‑recruiter‑friendly sourcing assistant. Enter **any job title** (e.g.,
 "Senior iOS Engineer", "Security Engineer", "Product Designer", "Solutions Architect"),
 and get an instant sourcing pack:
 
-• Boolean Pack: LinkedIn Title + Keywords, Google X‑ray, plus Broad vs Focused variants
+• Boolean Pack: LinkedIn Title + Keywords, Google X‑ray, **Extended Titles**, **Expanded Keywords**, **Company Include**, plus Broad vs Focused variants
 • Role Intel: must/nice skills, frameworks, clouds, databases, related titles, seniority ladder
 • Signals: conditional X‑rays (GitHub/Stack Overflow/Kaggle/Dribbble/Behance)
 • Company Maps: top companies, adjacent/feeder companies, and team names
@@ -17,7 +17,6 @@ No external APIs; safe for Streamlit Cloud. Ethical sourcing only — focus on s
 """
 
 import re
-import textwrap
 import streamlit as st
 from typing import List, Dict
 
@@ -32,7 +31,6 @@ ROLE_LIB: Dict[str, Dict] = {
         "frameworks": ["react", "node", "spring", "django", "graphql"],
         "clouds": ["aws", "gcp", "azure"],
         "databases": ["postgres", "mysql", "redis", "mongodb"],
-        "certs": ["AWS Developer", "Azure Developer", "GCP Associate"],
         "false_pos": ["qa tester", "help desk", "desktop support", "sap abap"],
         "top_companies": ["Google", "Amazon", "Meta", "Microsoft", "Netflix", "Stripe", "Airbnb"],
         "adjacent": ["Cloudflare", "Datadog", "Snowflake", "Twilio", "Atlassian"],
@@ -47,7 +45,6 @@ ROLE_LIB: Dict[str, Dict] = {
         "frameworks": ["react", "next.js", "vue", "graphql"],
         "clouds": ["aws", "gcp"],
         "databases": ["redis", "postgres"],
-        "certs": [],
         "false_pos": ["webmaster", "wordpress implementer"],
         "top_companies": ["Shopify", "Stripe", "Airbnb", "Netflix", "Canva"],
         "adjacent": ["Vercel", "Figma", "Cloudflare"],
@@ -62,7 +59,6 @@ ROLE_LIB: Dict[str, Dict] = {
         "frameworks": ["spring", "grpc", "django", "fastapi"],
         "clouds": ["aws", "gcp"],
         "databases": ["postgres", "mysql", "redis"],
-        "certs": [],
         "false_pos": ["sharepoint"],
         "top_companies": ["Uber", "Stripe", "Datadog", "Dropbox", "Snowflake"],
         "adjacent": ["Confluent", "Fastly", "Cloudflare"],
@@ -77,7 +73,6 @@ ROLE_LIB: Dict[str, Dict] = {
         "frameworks": ["swiftui", "uikit"],
         "clouds": ["aws", "gcp"],
         "databases": ["realm", "sqlite"],
-        "certs": [],
         "false_pos": ["ios support tech"],
         "top_companies": ["Apple", "Airbnb", "Lyft", "Pinterest"],
         "adjacent": ["Expo", "RevenueCat"],
@@ -92,7 +87,6 @@ ROLE_LIB: Dict[str, Dict] = {
         "frameworks": ["jetpack", "compose"],
         "clouds": ["aws", "gcp"],
         "databases": ["room", "sqlite"],
-        "certs": [],
         "false_pos": ["android support tech"],
         "top_companies": ["Google", "Square", "Cash App", "Uber"],
         "adjacent": ["Expo", "Firebase"],
@@ -107,7 +101,6 @@ ROLE_LIB: Dict[str, Dict] = {
         "frameworks": ["pytorch", "tensorflow", "sklearn", "transformers"],
         "clouds": ["aws", "gcp", "azure"],
         "databases": ["postgres", "bigquery", "redshift", "snowflake", "feature store"],
-        "certs": ["AWS ML Specialty"],
         "false_pos": ["research intern", "bi analyst"],
         "top_companies": ["OpenAI", "DeepMind", "Google", "Amazon AWS AI", "Meta AI", "NVIDIA"],
         "adjacent": ["Cohere", "Anthropic", "Hugging Face", "Scale AI", "Databricks"],
@@ -122,7 +115,6 @@ ROLE_LIB: Dict[str, Dict] = {
         "frameworks": ["spark", "dbt", "airflow"],
         "clouds": ["aws", "gcp", "azure"],
         "databases": ["snowflake", "redshift", "bigquery", "postgres"],
-        "certs": [],
         "false_pos": ["bi analyst"],
         "top_companies": ["Databricks", "Snowflake", "Stripe", "Netflix"],
         "adjacent": ["Fivetran", "Airbyte"],
@@ -137,7 +129,6 @@ ROLE_LIB: Dict[str, Dict] = {
         "frameworks": ["tableau", "looker", "mode"],
         "clouds": ["bigquery", "snowflake"],
         "databases": ["snowflake", "redshift", "bigquery"],
-        "certs": [],
         "false_pos": ["financial analyst"],
         "top_companies": ["DoorDash", "Airbnb", "Lyft", "Stripe"],
         "adjacent": ["Mode", "Amplitude"],
@@ -152,7 +143,6 @@ ROLE_LIB: Dict[str, Dict] = {
         "frameworks": ["jira", "figma", "sql"],
         "clouds": [],
         "databases": [],
-        "certs": [],
         "false_pos": ["project manager (construction)"],
         "top_companies": ["Google", "Amazon", "Meta", "Microsoft"],
         "adjacent": ["Atlassian", "Stripe"],
@@ -167,7 +157,6 @@ ROLE_LIB: Dict[str, Dict] = {
         "frameworks": ["figma", "framer"],
         "clouds": [],
         "databases": [],
-        "certs": [],
         "false_pos": ["graphic designer print"],
         "top_companies": ["Figma", "Canva", "Airbnb", "Shopify"],
         "adjacent": ["IDEO", "Pentagram"],
@@ -182,7 +171,6 @@ ROLE_LIB: Dict[str, Dict] = {
         "frameworks": ["terraform", "ansible", "helm"],
         "clouds": ["aws", "gcp", "azure"],
         "databases": ["postgres", "mysql", "redis"],
-        "certs": ["CKA", "AWS SysOps"],
         "false_pos": ["desktop support", "network technician"],
         "top_companies": ["Google", "LinkedIn", "Dropbox", "Shopify", "Cloudflare"],
         "adjacent": ["Datadog", "PagerDuty", "Fastly", "Snowflake", "Atlassian"],
@@ -197,7 +185,6 @@ ROLE_LIB: Dict[str, Dict] = {
         "frameworks": ["terraform", "argo", "helm"],
         "clouds": ["aws", "gcp", "azure"],
         "databases": ["postgres"],
-        "certs": [],
         "false_pos": ["it admin"],
         "top_companies": ["Shopify", "Stripe", "Cloudflare", "Datadog"],
         "adjacent": ["HashiCorp", "Pulumi"],
@@ -212,7 +199,6 @@ ROLE_LIB: Dict[str, Dict] = {
         "frameworks": ["owasp", "burp"],
         "clouds": ["aws"],
         "databases": ["postgres"],
-        "certs": ["OSCP", "CISSP"],
         "false_pos": ["soc analyst", "siem operator"],
         "top_companies": ["Google", "Cloudflare", "Stripe", "GitHub"],
         "adjacent": ["Snyk", "Auth0", "Okta"],
@@ -227,7 +213,6 @@ ROLE_LIB: Dict[str, Dict] = {
         "frameworks": ["postman", "terraform"],
         "clouds": ["aws", "gcp", "azure"],
         "databases": ["postgres"],
-        "certs": ["AWS SA‑Associate"],
         "false_pos": ["pure sales rep"],
         "top_companies": ["AWS", "Google Cloud", "Microsoft", "Datadog"],
         "adjacent": ["HashiCorp", "MongoDB"],
@@ -243,10 +228,6 @@ SMART_EXCLUDE_BASE = [
 ]
 
 # ============================= Helpers =============================
-
-def tokenize(text: str) -> List[str]:
-    return re.findall(r"[a-z0-9+#./-]+", text.lower())
-
 
 def map_title_to_category(title: str) -> str:
     t = (title or "").lower()
@@ -286,9 +267,49 @@ def map_title_to_category(title: str) -> str:
 
 def or_group(items: List[str]) -> str:
     items = [i for i in items if i]
-    if not items:
-        return ""
-    return "(" + " OR ".join([f'"{i}"' if " " in i else i for i in items]) + ")"
+    return "(" + " OR ".join([f'"{i}"' if " " in i else i for i in items]) + ")" if items else ""
+
+
+def title_abbrevs_for(cat: str) -> List[str]:
+    if cat in ["swe", "backend", "frontend", "devops", "sre"]:
+        return ["SWE", "Software Eng", "Software Dev", "SDE", "SDE II", "SDE2", "Sr Software Engineer", "Staff Software Engineer", "Principal Software Engineer"]
+    if cat == "ml":
+        return ["ML Engineer", "Machine Learning Eng", "Applied Scientist", "AI Engineer"]
+    if cat == "data_eng":
+        return ["Data Platform Engineer", "Analytics Engineer", "Data Infrastructure Engineer"]
+    if cat == "security":
+        return ["AppSec Engineer", "Product Security Engineer", "Security Software Engineer"]
+    if cat == "design":
+        return ["UI/UX Designer", "UX/UI Designer", "Interaction Designer", "Product Designer"]
+    if cat == "pm":
+        return ["PM", "Sr Product Manager", "Principal PM", "Group PM"]
+    if cat == "solutions_arch":
+        return ["Solutions Architect", "Solutions Engineer", "Sales Engineer"]
+    return []
+
+
+def expand_titles(base_titles: List[str], cat: str, seniority_bias: str) -> List[str]:
+    ext = list(dict.fromkeys(base_titles + title_abbrevs_for(cat)))
+    if seniority_bias == "Senior+":
+        add = []
+        for t in base_titles:
+            for p in ["Senior ", "Staff ", "Principal ", "Lead "]:
+                add.append(p + t)
+        ext += add
+    if seniority_bias == "Staff/Principal":
+        add = []
+        for t in base_titles:
+            for p in ["Staff ", "Principal ", "Lead "]:
+                add.append(p + t)
+        ext += add
+    # de‑dupe, keep order
+    seen = set()
+    out = []
+    for x in ext:
+        if x.lower() not in seen:
+            out.append(x)
+            seen.add(x.lower())
+    return out
 
 
 def build_booleans(titles, must, nice, location: str = "", add_not=True, extra_nots: List[str] = None):
@@ -310,33 +331,28 @@ def build_booleans(titles, must, nice, location: str = "", add_not=True, extra_n
     return li_title, li_keywords, google_xray, broad, focused
 
 
+def build_expanded_keywords(must: List[str], nice: List[str], stacks: List[str], clouds: List[str], dbs: List[str]) -> str:
+    # expanded = must + nice + frameworks + clouds + databases (capped to keep strings usable)
+    pool = list(dict.fromkeys(must + nice + stacks + clouds + dbs))
+    return or_group(pool[:18])
+
+
+def company_include_or(top: List[str], adjacent: List[str]) -> str:
+    companies = list(dict.fromkeys((top or []) + (adjacent or [])))
+    return or_group(companies[:20])
+
+
+def xray_with_companies(base_xray: str, companies_or: str) -> str:
+    return f"{base_xray} {companies_or}" if companies_or else base_xray
+
+
 def confidence_score(titles: List[str], must: List[str], nice: List[str]) -> int:
     score = 40 if titles else 20
     score += min(30, len(must) * 5)
     score += min(15, len(nice) * 2)
-    if len(titles) > 8 or len(must) + len(nice) > 16:
+    if len(titles) > 12 or len(must) + len(nice) > 20:
         score -= 5
     return max(10, min(100, score))
-
-# Signal queries
-
-def github_query(skills: List[str]):
-    langs = [s for s in skills if s in ["python","javascript","typescript","go","java","c++","rust","kotlin","swift"]]
-    return ("site:github.com (developer OR engineer) (" + " OR ".join(langs[:6]) + ")") if langs else ""
-
-def stackoverflow_query(skills: List[str]):
-    core = (skills[:6] if len(skills) > 0 else [])
-    return ("site:stackoverflow.com/users (developer OR engineer) (" + " OR ".join(core) + ")") if core else ""
-
-def kaggle_query(skills: List[str]):
-    dl = [s for s in skills if s in ["pytorch","tensorflow","sklearn","xgboost","catboost"]]
-    return ("site:kaggle.com (Grandmaster OR Master OR Competitions) (" + " OR ".join(dl[:5] or skills[:5]) + ")") if (dl or skills) else ""
-
-def dribbble_query(skills: List[str]):
-    return "site:dribbble.com (Product Designer OR UX OR UI) (Figma OR prototype OR case study)"
-
-def behance_query(skills: List[str]):
-    return "site:behance.net (Product Design OR UX) (Figma OR prototype OR case study)"
 
 # ============================= Theming =============================
 PALETTES = {
@@ -348,8 +364,7 @@ PALETTES = {
 # ============================= UI =============================
 st.set_page_config(page_title="Sourcing Assistant — Any Title", page_icon="🎯", layout="wide")
 
-# Controls up top to theme the page
-col_theme, col_title = st.columns([1,6])
+col_theme, _ = st.columns([1,6])
 with col_theme:
     theme_choice = st.selectbox("Theme", list(PALETTES.keys()), index=0)
 P = PALETTES[theme_choice]
@@ -367,6 +382,7 @@ CSS = f"""
 .h2 {{font-weight:800; font-size:1.35rem; margin:.25rem 0 .5rem}}
 .small {{opacity:.9; font-size:.9rem}}
 .primary {{color:{P['accent']}; font-weight:700}}
+.subcap {{color:#6b7280; font-size:.9rem; margin-top:.25rem}}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -380,13 +396,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.write("")
-colA, colB, colC = st.columns([3,2,2])
+colA, colB, colC, colD = st.columns([3,2,2,2])
 with colA:
     any_title = st.text_input("Job title (anything!)", placeholder="e.g., Senior Security Engineer in NYC")
 with colB:
     location = st.text_input("Location (optional)", placeholder="e.g., New York, Remote")
 with colC:
-    use_exclude = st.toggle("Smart NOT", value=True)
+    use_exclude = st.toggle("Smart NOT", value=True, help="Auto‑exclude interns, recruiters, help desk, etc.")
+with colD:
+    seniority_bias = st.selectbox("Seniority bias", ["All levels", "Senior+", "Staff/Principal"], index=0)
 
 extra_not = st.text_input("Custom NOT terms (comma‑separated)", placeholder="e.g., contractor, internship")
 extra_not_list = [t.strip() for t in extra_not.split(",") if t.strip()]
@@ -395,16 +413,20 @@ if st.button("✨ Build sourcing pack", type="primary"):
     cat = map_title_to_category(any_title)
     R = ROLE_LIB[cat]
 
-    titles = R["titles"]
+    base_titles = R["titles"]
+    titles = expand_titles(base_titles, cat, seniority_bias)
     must = R["must"]
     nice = R["nice"]
 
     li_title, li_keywords, google_xray, broad_var, focused_var = build_booleans(
         titles, must, nice, location, use_exclude, R.get("false_pos", []) + extra_not_list
     )
+    expanded_keywords = build_expanded_keywords(must, nice, R.get("frameworks", []), R.get("clouds", []), R.get("databases", []))
+    companies_or = company_include_or(R.get("top_companies", []), R.get("adjacent", []))
+    xray_companies = xray_with_companies(google_xray, companies_or)
+
     score = confidence_score(titles, must, nice)
 
-    # fun confetti
     st.balloons()
 
     m1, m2, m3 = st.columns(3)
@@ -416,26 +438,52 @@ if st.button("✨ Build sourcing pack", type="primary"):
         "🎯 Boolean Pack", "🧠 Role Intel", "🌐 Signals", "🏢 Company Maps", "🚦 Filters", "💌 Outreach", "✅ Checklist", "⬇️ Export"
     ])
 
-    # Boolean Pack
+    # -------------------- Tab 1: Boolean Pack --------------------
     with tabs[0]:
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("**LinkedIn — Title (Current)**")
-            st.code(li_title, language="text")
-            st.text_input("Copy Title (Current)", value=li_title, label_visibility="collapsed")
-        with c2:
-            st.markdown("**LinkedIn — Keywords**")
-            st.code(li_keywords, language="text")
-            st.text_input("Copy Keywords", value=li_keywords, label_visibility="collapsed")
+        st.markdown("**LinkedIn — Title (Current)**")
+        st.code(li_title, language="text")
+        st.text_input("Copy Title (Current)", value=li_title, label_visibility="collapsed")
+        st.caption("Use in LinkedIn's **Title (Current)** filter to match current titles only. We've added seniority prefixes and common abbreviations for top‑tech profiles.")
+
+        st.markdown("**LinkedIn — Title (Current) — Extended synonyms**")
+        st.code(or_group(titles[:20]), language="text")
+        st.text_input("Copy Extended Title", value=or_group(titles[:20]), label_visibility="collapsed")
+        st.caption("A larger synonym net (up to 20 terms) including abbreviations (e.g., SWE/SDE) and senior variants. Start with the standard Title, then try this if volume is low.")
+
+        st.markdown("**LinkedIn — Keywords (Core)**")
+        st.code(li_keywords, language="text")
+        st.text_input("Copy Keywords (Core)", value=li_keywords, label_visibility="collapsed")
+        st.caption("Paste into **Keywords**. Core = must‑have + nice‑to‑have skills with Smart NOT terms to remove common false positives.")
+
+        st.markdown("**LinkedIn — Keywords (Expanded)**")
+        st.code(expanded_keywords, language="text")
+        st.text_input("Copy Keywords (Expanded)", value=expanded_keywords, label_visibility="collapsed")
+        st.caption("Adds frameworks, cloud, and database signals to the Core skills. Use when targeting candidates from top tech stacks.")
+
+        st.markdown("**Company Include (Top + Adjacent)**")
+        st.code(companies_or, language="text")
+        st.text_input("Copy Company Include", value=companies_or, label_visibility="collapsed")
+        st.caption("Use in LinkedIn's **Company** filter (current or past) to bias toward top tech and strong feeder orgs.")
+
         st.markdown("**Google X‑ray (LinkedIn)**")
         st.code(google_xray, language="text")
         st.text_input("Copy Google X‑ray", value=google_xray, label_visibility="collapsed")
+        st.caption("Google search for public profiles. Add a city/region to localize.")
+
+        st.markdown("**Google X‑ray — Top Tech bias**")
+        st.code(xray_companies, language="text")
+        st.text_input("Copy X‑ray (Top Tech bias)", value=xray_companies, label_visibility="collapsed")
+        st.caption("Same X‑ray with a company OR group appended — handy to surface candidates from top tech firms.")
+
         st.markdown("**Variant A (Broad)**")
         st.code(broad_var, language="text")
+        st.caption("Fewer title synonyms + a mix of must & nice skills → **more volume**. Use for market mapping and early funnel.")
+
         st.markdown("**Variant B (Focused)**")
         st.code(focused_var, language="text")
+        st.caption("Full title coverage + must‑have skills only → **higher precision**. Use when response handling time is limited.")
 
-    # Role Intel
+    # -------------------- Tab 2: Role Intel --------------------
     with tabs[1]:
         st.markdown("<span class='kicker'>Must‑have</span>", unsafe_allow_html=True)
         st.markdown(" ".join([f"<span class='badge'>{s}</span>" for s in must]), unsafe_allow_html=True)
@@ -448,41 +496,42 @@ if st.button("✨ Build sourcing pack", type="primary"):
         st.markdown("<span class='kicker' style='margin-top:.6rem'>Related titles & seniority</span>", unsafe_allow_html=True)
         st.markdown(" ".join([f"<span class='badge'>{t}</span>" for t in R.get("titles", []) + R.get("seniority", [])]), unsafe_allow_html=True)
 
-    # Signals (Open‑source or portfolio sites)
+    # -------------------- Tab 3: Signals --------------------
     with tabs[2]:
         sig = R.get("signals", {})
         if sig.get("github"):
-            gh = github_query(must + nice)
+            gh = "site:github.com (developer OR engineer) (" + " OR ".join([s for s in (must + nice) if s in ["python","javascript","typescript","go","java","c++","rust","kotlin","swift"]][:6]) + ")"
             if gh:
                 st.markdown("**GitHub**")
                 st.code(gh, language="text")
                 st.text_input("Copy GitHub X‑ray", value=gh, label_visibility="collapsed")
+                st.caption("Find builders with repos in relevant languages.")
         if sig.get("stackoverflow"):
-            so = stackoverflow_query(must + nice)
-            if so:
-                st.markdown("**Stack Overflow**")
-                st.code(so, language="text")
-                st.text_input("Copy Stack Overflow X‑ray", value=so, label_visibility="collapsed")
+            so = "site:stackoverflow.com/users (developer OR engineer) (" + " OR ".join((must + nice)[:6]) + ")"
+            st.markdown("**Stack Overflow**")
+            st.code(so, language="text")
+            st.text_input("Copy Stack Overflow X‑ray", value=so, label_visibility="collapsed")
+            st.caption("Experienced users often have strong problem‑solving chops.")
         if sig.get("kaggle"):
-            kg = kaggle_query(must + nice)
-            if kg:
-                st.markdown("**Kaggle**")
-                st.code(kg, language="text")
-                st.text_input("Copy Kaggle X‑ray", value=kg, label_visibility="collapsed")
+            kg = "site:kaggle.com (Grandmaster OR Master OR Competitions) (" + " OR ".join([s for s in (must + nice) if s in ["pytorch","tensorflow","sklearn","xgboost","catboost"]][:5] or (must + nice)[:5]) + ")"
+            st.markdown("**Kaggle**")
+            st.code(kg, language="text")
+            st.text_input("Copy Kaggle X‑ray", value=kg, label_visibility="collapsed")
+            st.caption("Great for MLE/DS talent who compete or share notebooks.")
         if sig.get("dribbble"):
-            db = dribbble_query(must + nice)
+            db = "site:dribbble.com (Product Designer OR UX OR UI) (Figma OR prototype OR case study)"
             st.markdown("**Dribbble**")
             st.code(db, language="text")
             st.text_input("Copy Dribbble X‑ray", value=db, label_visibility="collapsed")
+            st.caption("Design portfolios with product case studies.")
         if sig.get("behance"):
-            be = behance_query(must + nice)
+            be = "site:behance.net (Product Design OR UX) (Figma OR prototype OR case study)"
             st.markdown("**Behance**")
             st.code(be, language="text")
             st.text_input("Copy Behance X‑ray", value=be, label_visibility="collapsed")
-        if not any(sig.values()):
-            st.info("No external signal recipe for this role.")
+            st.caption("Another rich source of design portfolios.")
 
-    # Company Maps
+    # -------------------- Tab 4: Company Maps --------------------
     with tabs[3]:
         st.markdown("<div class='kicker'>Top companies</div>", unsafe_allow_html=True)
         st.markdown(" ".join([f"<span class='badge'>{c}</span>" for c in R.get("top_companies", [])]), unsafe_allow_html=True)
@@ -490,24 +539,25 @@ if st.button("✨ Build sourcing pack", type="primary"):
         st.markdown(" ".join([f"<span class='badge'>{c}</span>" for c in R.get("adjacent", [])]), unsafe_allow_html=True)
         st.markdown("<div class='kicker' style='margin-top:.6rem'>Team names to target</div>", unsafe_allow_html=True)
         st.markdown(" ".join([f"<span class='badge'>{c}</span>" for c in R.get("team_names", [])]), unsafe_allow_html=True)
+        st.caption("Use these as **Company** filters in LinkedIn; consider both current and past employer.")
 
-    # Filters
+    # -------------------- Tab 5: Filters --------------------
     with tabs[4]:
         st.markdown("""
         **LinkedIn tips**
-        - **Title (Current):** use the Title boolean
+        - **Title (Current):** use the Title boolean (standard first; extended if low volume)
         - **Company:** include Top/Adjacent; exclude current employer if needed
         - **Location:** add city/region; widen to country if volume is low
         - **Experience:** pick a realistic band for the role’s level
-        - **Keywords:** use the Keywords boolean; toggle 1–2 frameworks to tune
+        - **Keywords:** use Core; try Expanded when targeting specific stacks
         """)
         fps = SMART_EXCLUDE_BASE + R.get("false_pos", []) + extra_not_list
         st.markdown("<div class='kicker' style='margin-top:.6rem'>Common NOT terms</div>", unsafe_allow_html=True)
         st.markdown(" ".join([f"<span class='badge'>{t}</span>" for t in fps]), unsafe_allow_html=True)
 
-    # Outreach
+    # -------------------- Tab 6: Outreach --------------------
     with tabs[5]:
-        st.markdown("**Angles that resonate** (keep 1 short CTA)", unsafe_allow_html=False)
+        st.markdown("**Angles that resonate** (keep 1 short CTA)")
         hooks = []
         cat_icons = {"swe":"🧱","frontend":"🎨","backend":"🧩","mobile_ios":"📱","mobile_android":"🤖","ml":"🧪","data_eng":"🗄️","data_analyst":"📊","pm":"🧭","design":"✏️","sre":"🚦","devops":"⚙️","security":"🛡️","solutions_arch":"🧰"}
         icon = cat_icons.get(cat, "✨")
@@ -531,7 +581,7 @@ if st.button("✨ Build sourcing pack", type="primary"):
             st.markdown(f"- {icon} {h}")
         st.caption("No protected‑attribute targeting. Keep it candidate‑centric and skills‑based.")
 
-    # Checklist
+    # -------------------- Tab 7: Checklist --------------------
     with tabs[6]:
         st.markdown("""
         - ✅ Broad & Focused variants ready
@@ -542,10 +592,10 @@ if st.button("✨ Build sourcing pack", type="primary"):
         - ✅ Save the best string for reuse on similar roles
         """)
 
-    # Export
+    # -------------------- Tab 8: Export --------------------
     with tabs[7]:
         pack = f"""
-        ROLE: {any_title}
+ROLE: {any_title}
 LOCATION: {location or 'N/A'}
 CONFIDENCE: {score}/100
 
@@ -556,11 +606,20 @@ NICE: {', '.join(nice)}
 LINKEDIN TITLE:
 {li_title}
 
-LINKEDIN KEYWORDS:
+EXTENDED TITLE:
+{or_group(titles[:20])}
+
+KEYWORDS (CORE):
 {li_keywords}
+
+KEYWORDS (EXPANDED):
+{expanded_keywords}
 
 GOOGLE XRAY:
 {google_xray}
+
+XRAY (TOP TECH BIAS):
+{xray_companies}
 
 VARIANT A (BROAD):
 {broad_var}
@@ -583,4 +642,4 @@ TEAM NAMES:
         st.download_button("Download pack (.txt)", data=pack, file_name="sourcing_pack.txt")
 
 else:
-    st.info("Type **any job title**, optionally add a location and custom NOT terms, then click **Build sourcing pack**.")
+    st.info("Type **any job title**, optionally add a location and custom NOT terms, pick a seniority bias, then click **Build sourcing pack**.")
