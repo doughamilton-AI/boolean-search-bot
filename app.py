@@ -557,8 +557,7 @@ if st.session_state.get("built"):
         with st.expander("✏️ Customize titles & skills (live)", expanded=False):
             col_ed1, col_ed2 = st.columns([1,1])
             with col_ed1:
-                titles_text = st.text_area("Titles (one per line)", value="
-".join(titles), height=180)
+                titles_text = st.text_area("Titles (one per line)", value="\\n".join(ti
             with col_ed2:
                 must_text = st.text_area("Must-have skills (comma-separated)", value=", ".join(must), height=120)
                 nice_text = st.text_area("Nice-to-have skills (comma-separated)", value=", ".join(nice), height=120)
@@ -743,59 +742,3 @@ Skills (All CSV):
         elif cat == "data_analyst":
             hooks = ["Partner with PMs on experiment design", "Direct line from analysis → product decisions"]
         elif cat == "design":
-            hooks = ["Product ownership + design system contributions", "Research‑to‑ship loop with real impact"]
-        elif cat == "pm":
-            hooks = ["High‑leverage platform surface area", "Clear metrics ownership (activation/retention)"]
-        elif cat == "security":
-            hooks = ["Own AppSec roadmap and threat modeling", "Budget/time for fixing systemic issues"]
-        elif cat == "solutions_arch":
-            hooks = ["Complex, technical pre‑sales with real engineering", "Autonomy over POCs and customer outcomes"]
-        for h in hooks:
-            st.markdown(f"- {icon} {h}")
-
-    # -------------------- Tab 7: Checklist --------------------
-    with tabs[6]:
-        st.markdown("""
-        - ✅ Broad & Focused variants ready
-        - ✅ NOT terms set (Smart + custom)
-        - ✅ 1–2 frameworks toggled for volume control
-        - ✅ Company filters selected (Top + Adjacent)
-        - ✅ Outreach angle drafted with measurable impact
-        - ✅ Save the best string for reuse on similar roles
-        """)
-
-    # -------------------- Tab 8: Export --------------------
-    with tabs[7]:
-        pack = f"""
-ROLE: {st.session_state.get('any_title','')}
-LOCATION: {st.session_state.get('location','N/A') or 'N/A'}
-CONFIDENCE: {score}/100
-
-TITLES: {', '.join(titles)}
-MUST: {', '.join(must)}
-NICE: {', '.join(nice)}
-
-LINKEDIN TITLE:
-{li_title}
-
-EXTENDED TITLE:
-{or_group(titles[:20])}
-
-KEYWORDS (CORE):
-{li_keywords}
-
-KEYWORDS (EXPANDED):
-{expanded_keywords}
-
-SKILLS (MUST):
-{skills_must_csv}
-
-SKILLS (NICE):
-{skills_nice_csv}
-
-SKILLS (ALL):
-{skills_all_csv}
-        """
-        st.download_button("Download pack (.txt)", data=pack, file_name="sourcing_pack.txt")
-else:
-    st.info("Type **any job title**, optionally add a location and custom NOT terms, then click **Build sourcing pack**.")
