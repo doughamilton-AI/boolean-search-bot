@@ -490,18 +490,49 @@ with colC:
 extra_not = st.text_input("Custom NOT terms (comma‑separated)", placeholder="e.g., contractor, internship")
 extra_not_list = [t.strip() for t in extra_not.split(",") if t.strip()]
 
-if st.button("✨ Build sourcing pack", type="primary"):
-    cat = map_title_to_category_any(any_title)
+build_clicked = st.button("✨ Build sourcing pack", type="primary")
+if build_clicked:
+    # Persist a baseline so edits survive reruns
+    cat_tmp = map_title_to_category_any(any_title)
+    st.session_state["built"] = True
+    st.session_state["cat"] = cat_tmp
+    st.session_state["any_title"] = any_title
+    st.session_state["location"] = location
+    st.session_state["use_exclude"] = use_exclude
+    # Seed editable lists from the role library
+    R0 = ROLE_LIB[cat_tmp]
+    st.session_state["edited_titles"] = expand_titles(R0["titles"], cat_tmp)
+    st.session_state["edited_must"] = R0["must"]
+    st.session_state["edited_nice"] = R0["nice"]
+    st.session_state["selected_extras"] = []  # frameworks/clouds/dbs to optionally add to Core
+    st.session_state["include_extras_core"] = False
+    st.experimental_rerun()
+
+if st.session_state.get("built"):
+    # ===== Rebuild strings from current (possibly edited) lists =====
+    cat = st.session_state.get("cat")
     R = ROLE_LIB[cat]
 
-    base_titles = R["titles"]
-    titles = expand_titles(base_titles, cat)
-    must = R["must"]
-    nice = R["nice"]
+    # Live lists (editable)
+    titles = st.session_state.get("edited_titles", expand_titles(R["titles"], cat))
+    must = st.session_state.get("edited_must", R["must"])
+    nice = st.session_state.get("edited_nice", R["nice"])
 
-    li_title, li_keywords, broad_var, focused_var = build_booleans(
-        titles, must, nice, "", use_exclude, R.get("false_pos", []) + extra_not_list
-    )
+    # Extras to widen/narrow volume
+    extras_options = list(dict.fromkeys(R.get("frameworks", []) + R.get("clouds", []) + R.get("databases", [])))
+    selected_extras = st.session_state.get("selected_extras", [])
+    include_extras_core = st.session_state.get("include_extras_core", False)
+
+    # Build strings (respect Smart NOT + custom NOT on every run)
+    # Title
+    li_title = or_group(titles)
+    # Keywords (Core)
+    core_terms = must + nice + (selected_extras if include_extras_core else [])
+    li_kw_core = or_group(core_terms)
+    nots = SMART_EXCLUDE_BASE + R.get("false_pos", []) + [t.strip() for t in (extra_not or "").split(",") if t.strip()]
+    li_keywords = f"{li_kw_core} NOT (" + " OR ".join(nots) + ")" if nots else li_kw_core
+
+    # Expanded keywords stay broad (full stack + clouds + dbs)
     expanded_keywords = build_expanded_keywords(must, nice, R.get("frameworks", []), R.get("clouds", []), R.get("databases", []))
 
     # CSV skills for LinkedIn Skills filter
@@ -510,8 +541,6 @@ if st.button("✨ Build sourcing pack", type="primary"):
     skills_all_csv = ", ".join(list(dict.fromkeys(must + nice)))
 
     score = confidence_score(titles, must, nice)
-
-    st.balloons()
 
     m1, m2, m3 = st.columns(3)
     m1.metric("Titles covered", f"{len(titles)}")
@@ -524,7 +553,29 @@ if st.button("✨ Build sourcing pack", type="primary"):
 
     # -------------------- Tab 1: Boolean Pack (Titles, Keywords, Skills only) --------------------
     with tabs[0]:
-        # Organized grid layout with tiny copy buttons
+        # ---- Inline editors & chips (Customize) ----
+        with st.expander("✏️ Customize titles & skills (live)", expanded=False):
+            col_ed1, col_ed2 = st.columns([1,1])
+            with col_ed1:
+                titles_text = st.text_area("Titles (one per line)", value="
+".join(titles), height=180)
+            with col_ed2:
+                must_text = st.text_area("Must-have skills (comma-separated)", value=", ".join(must), height=120)
+                nice_text = st.text_area("Nice-to-have skills (comma-separated)", value=", ".join(nice), height=120)
+            col_chip1, col_chip2 = st.columns([1,1])
+            with col_chip1:
+                selected_extras_new = st.multiselect("Optional extras (frameworks/clouds/dbs)", options=extras_options, default=selected_extras)
+            with col_chip2:
+                include_extras_core_new = st.checkbox("Include selected extras in Core Keywords", value=include_extras_core)
+            if st.button("Apply changes", key="apply_edits"):
+                st.session_state["edited_titles"] = [t.strip() for t in titles_text.splitlines() if t.strip()]
+                st.session_state["edited_must"] = [s.strip() for s in must_text.split(",") if s.strip()]
+                st.session_state["edited_nice"] = [s.strip() for s in nice_text.split(",") if s.strip()]
+                st.session_state["selected_extras"] = selected_extras_new
+                st.session_state["include_extras_core"] = include_extras_core_new
+                st.experimental_rerun()
+
+        # ---- Copy cards ----
         ext_title = or_group(titles[:20])
         grid1 = st.container()
         with grid1:
@@ -553,7 +604,7 @@ if st.button("✨ Build sourcing pack", type="primary"):
             copy_card("LinkedIn — Skills (All, CSV)", skills_all_csv, "copy_sk_all", 10)
             st.markdown("</div>", unsafe_allow_html=True)
 
-        # Copy All bundle at the bottom
+        # ---- Copy All bundle ----
         copy_all = f"""Title (Current):
 {li_title}
 
@@ -572,6 +623,44 @@ Skills (All CSV):
         st.markdown("<div class='grid-full'>", unsafe_allow_html=True)
         copy_card("Copy All — Titles + Keywords + Skills", copy_all, "copy_all_bundle", 14)
         st.markdown("</div>", unsafe_allow_html=True)
+
+        # ---- 🧪 String Health ----
+        def _paren_ok(s: str) -> bool:
+            depth = 0
+            for ch in s:
+                if ch == '(': depth += 1
+                elif ch == ')':
+                    depth -= 1
+                    if depth < 0: return False
+            return depth == 0
+        def _terms_from_or_group(g: str):
+            g = g.strip()
+            if g.startswith('(') and g.endswith(')'):
+                g = g[1:-1]
+            parts = [p.strip().strip('"').lower() for p in g.split(' OR ') if p.strip()]
+            seen, dups = set(), set()
+            for p in parts:
+                if p in seen: dups.add(p)
+                else: seen.add(p)
+            return parts, dups
+        core_part = li_keywords.split(" NOT ")[0].strip()
+        title_terms, title_dups = _terms_from_or_group(li_title)
+        core_terms_list, core_dups = _terms_from_or_group(core_part)
+        health_cols = st.columns(4)
+        health_cols[0].metric("Chars (Keywords)", len(li_keywords))
+        health_cols[1].metric("OR count", li_keywords.count(" OR "))
+        health_cols[2].metric("Title terms", len(title_terms))
+        health_cols[3].metric("Dupes in Core", len(core_dups))
+        issues = []
+        if len(li_keywords) > 500: issues.append("Keywords are long; consider trimming to < 500 chars")
+        if li_keywords.count(" OR ") > 60: issues.append("High OR count; remove niche or redundant terms")
+        if not _paren_ok(li_keywords): issues.append("Unbalanced parentheses; copy fresh from cards")
+        if core_dups: issues.append("Duplicate core terms: " + ", ".join(sorted(core_dups)))
+        if issues:
+            st.warning("
+".join([f"• {x}" for x in issues]))
+        else:
+            st.success("String looks healthy and ready to paste into LinkedIn.")
 
     # -------------------- Tab 2: Role Intel --------------------
     with tabs[1]:
@@ -635,7 +724,7 @@ Skills (All CSV):
         - **Experience:** pick a realistic band for the role’s level
         - **Keywords:** use Core; try Expanded when targeting specific stacks
         """)
-        fps = SMART_EXCLUDE_BASE + R.get("false_pos", []) + extra_not_list
+        fps = SMART_EXCLUDE_BASE + R.get("false_pos", []) + [t.strip() for t in (extra_not or "").split(",") if t.strip()]
         st.markdown("<div class='kicker' style='margin-top:.6rem'>Common NOT terms</div>", unsafe_allow_html=True)
         st.markdown(" ".join([f"<span class='badge'>{t}</span>" for t in fps]), unsafe_allow_html=True)
 
@@ -678,8 +767,8 @@ Skills (All CSV):
     # -------------------- Tab 8: Export --------------------
     with tabs[7]:
         pack = f"""
-ROLE: {any_title}
-LOCATION: {location or 'N/A'}
+ROLE: {st.session_state.get('any_title','')}
+LOCATION: {st.session_state.get('location','N/A') or 'N/A'}
 CONFIDENCE: {score}/100
 
 TITLES: {', '.join(titles)}
@@ -708,6 +797,5 @@ SKILLS (ALL):
 {skills_all_csv}
         """
         st.download_button("Download pack (.txt)", data=pack, file_name="sourcing_pack.txt")
-
 else:
     st.info("Type **any job title**, optionally add a location and custom NOT terms, then click **Build sourcing pack**.")
