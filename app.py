@@ -733,11 +733,91 @@ Skills (All CSV):
         cat_icons = {"swe":"🧱","frontend":"🎨","backend":"🧩","mobile_ios":"📱","mobile_android":"🤖","ml":"🧪","data_eng":"🗄️","data_analyst":"📊","pm":"🧭","design":"✏️","sre":"🚦","devops":"⚙️","security":"🛡️","solutions_arch":"🧰"}
         icon = cat_icons.get(cat, "✨")
         if cat in ["swe","backend","frontend","devops","sre"]:
-            hooks = ["Own a core service at scale; modern stack (K8s/Cloud)", "Greenfield feature with autonomy & measurable impact"]
+            hooks = [
+                "Own a core service at scale; modern stack (K8s/Cloud)",
+                "Greenfield feature with autonomy & measurable impact",
+            ]
         elif cat == "ml":
-            hooks = ["Ship models to prod fast (LLM/RecSys)", "GPU budget + modern tooling (Ray/MLflow)"]
+            hooks = [
+                "Ship models to prod fast (LLM/RecSys)",
+                "GPU budget + modern tooling (Ray/MLflow)",
+            ]
         elif cat == "data_eng":
-            hooks = ["Modern data stack (Spark/DBT/Snowflake)", "Own pipelines that unblock product teams"]
+            hooks = [
+                "Modern data stack (Spark/DBT/Snowflake)",
+                "Own pipelines that unblock product teams",
+            ]
         elif cat == "data_analyst":
-            hooks = ["Partner with PMs on experiment design", "Direct line from analysis → product decisions"]
+            hooks = [
+                "Partner with PMs on experiment design",
+                "Direct line from analysis → product decisions",
+            ]
         elif cat == "design":
+            hooks = [
+                "Own product surfaces + contribute to design system",
+                "Tight research → prototype → ship loop with measurable outcomes",
+            ]
+        elif cat == "pm":
+            hooks = [
+                "High‑leverage platform surface area",
+                "Clear metrics ownership (activation/retention)",
+            ]
+        elif cat == "security":
+            hooks = [
+                "Own AppSec roadmap and threat modeling",
+                "Time/budget for fixing systemic security issues",
+            ]
+        elif cat == "solutions_arch":
+            hooks = [
+                "Complex, technical pre‑sales with real engineering",
+                "Autonomy over POCs and customer outcomes",
+            ]
+        for h in hooks:
+            st.markdown(f"- {icon} {h}")
+
+    # -------------------- Tab 7: Checklist --------------------
+    with tabs[6]:
+        st.markdown("""
+        - ✅ Broad & Focused variants ready
+        - ✅ NOT terms set (Smart + custom)
+        - ✅ 1–2 frameworks toggled for volume control
+        - ✅ Company filters selected (Top + Adjacent)
+        - ✅ Outreach angle drafted with measurable impact
+        - ✅ Save the best string for reuse on similar roles
+        """)
+
+    # -------------------- Tab 8: Export --------------------
+    with tabs[7]:
+        pack = f"""
+ROLE: {st.session_state.get('any_title','')}
+LOCATION: {st.session_state.get('location','N/A') or 'N/A'}
+CONFIDENCE: {score}/100
+
+TITLES: {', '.join(titles)}
+MUST: {', '.join(must)}
+NICE: {', '.join(nice)}
+
+LINKEDIN TITLE:
+{li_title}
+
+EXTENDED TITLE:
+{or_group(titles[:20])}
+
+KEYWORDS (CORE):
+{li_keywords}
+
+KEYWORDS (EXPANDED):
+{expanded_keywords}
+
+SKILLS (MUST):
+{skills_must_csv}
+
+SKILLS (NICE):
+{skills_nice_csv}
+
+SKILLS (ALL):
+{skills_all_csv}
+        """
+        st.download_button("Download pack (.txt)", data=pack, file_name="sourcing_pack.txt")
+else:
+    st.info("Type **any job title**, optionally add a location and custom NOT terms, then click **Build sourcing pack**.")
