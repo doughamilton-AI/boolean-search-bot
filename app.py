@@ -21,6 +21,17 @@ import streamlit as st
 import streamlit.components.v1 as components
 from typing import List, Dict
 
+# --- Streamlit rerun helper for compatibility across versions ---
+def _safe_rerun():
+    rr = getattr(st, "rerun", None)
+    if callable(rr):
+        rr()
+    else:
+        rr2 = getattr(st, "experimental_rerun", None)
+        if callable(rr2):
+            rr2()
+
+
 # ============================= Role Library =============================
 # Category‑level presets (used for any job title via fuzzy mapping)
 ROLE_LIB: Dict[str, Dict] = {
@@ -510,7 +521,7 @@ if build_clicked:
     st.session_state["edited_nice"] = R0["nice"]
     st.session_state["selected_extras"] = []  # frameworks/clouds/dbs to optionally add to Core
     st.session_state["include_extras_core"] = False
-    st.experimental_rerun()
+    _safe_rerun()
 
 if st.session_state.get("built"):
     # ===== Rebuild strings from current (possibly edited) lists =====
@@ -576,7 +587,7 @@ if st.session_state.get("built"):
                 st.session_state["edited_nice"] = [s.strip() for s in nice_text.split(",") if s.strip()]
                 st.session_state["selected_extras"] = selected_extras_new
                 st.session_state["include_extras_core"] = include_extras_core_new
-                st.experimental_rerun()
+                _safe_rerun()
 
         # ---- Copy cards ----
         ext_title = or_group(titles[:20])
@@ -825,3 +836,4 @@ SKILLS (ALL):
         st.download_button("Download pack (.txt)", data=pack, file_name="sourcing_pack.txt")
 else:
     st.info("Type **any job title**, optionally add a location and custom NOT terms, then click **Build sourcing pack**.")
+
