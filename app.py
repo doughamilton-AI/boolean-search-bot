@@ -557,7 +557,7 @@ if st.session_state.get("built"):
         with st.expander("✏️ Customize titles & skills (live)", expanded=False):
             col_ed1, col_ed2 = st.columns([1,1])
             with col_ed1:
-                titles_text = st.text_area("Titles (one per line)", value="\\n".join(ti
+                titles_text = st.text_area("Titles (one per line)", value="\n".join(titles), height=180)
             with col_ed2:
                 must_text = st.text_area("Must-have skills (comma-separated)", value=", ".join(must), height=120)
                 nice_text = st.text_area("Nice-to-have skills (comma-separated)", value=", ".join(nice), height=120)
@@ -656,8 +656,7 @@ Skills (All CSV):
         if not _paren_ok(li_keywords): issues.append("Unbalanced parentheses; copy fresh from cards")
         if core_dups: issues.append("Duplicate core terms: " + ", ".join(sorted(core_dups)))
         if issues:
-            st.warning("
-".join([f"• {x}" for x in issues]))
+            st.warning("\n".join([f"• {x}" for x in issues]))
         else:
             st.success("String looks healthy and ready to paste into LinkedIn.")
 
