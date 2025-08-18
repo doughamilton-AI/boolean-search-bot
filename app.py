@@ -485,7 +485,11 @@ with colA:
 with colB:
     location = st.text_input("Location (optional)", placeholder="e.g., New York, Remote")
 with colC:
-    use_exclude = st.toggle("Smart NOT", value=True, help="Auto‑exclude interns, recruiters, help desk, etc.")
+    # Fallback for older Streamlit versions (some builds don't have st.toggle)
+    toggle_widget = getattr(st, "toggle", st.checkbox)
+    use_exclude = toggle_widget("Smart NOT", value=True, help="Auto‑exclude interns, recruiters, help desk, etc.")
+    if not hasattr(st, "toggle"):
+        st.caption("Using checkbox fallback — upgrade Streamlit to enable the toggle UI.")
 
 extra_not = st.text_input("Custom NOT terms (comma‑separated)", placeholder="e.g., contractor, internship")
 extra_not_list = [t.strip() for t in extra_not.split(",") if t.strip()]
