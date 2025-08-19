@@ -242,6 +242,62 @@ ROLE_LIB: Dict[str, Dict] = {
     },
 }
 
+# ============================= Global skill dictionary (extra coverage) =============================
+GLOBAL_SKILLS_EXTRA = [
+    # SWE / Backend core
+    "microservices","distributed systems","rest","grpc","graphql","event-driven","cqrs","api design","openapi","swagger",
+    "message queue","kafka","pulsar","rabbitmq","nats","kinesis","sqs","pub/sub","serverless","lambda",
+    "oauth2","oidc","sso","auth0","okta","jwt","rate limiting","caching","feature flags",
+    # Infra / DevOps / SRE
+    "docker","containerd","kubernetes","k8s","helm","kustomize","istio","linkerd","envoy","service mesh",
+    "terraform","pulumi","ansible","packer","argo cd","spinnaker","jenkins","github actions","gitlab ci","circleci","bazel","nix",
+    "prometheus","grafana","opentelemetry","jaeger","datadog","new relic","splunk","pagerduty","oncall","incident response","slo","sla","observability",
+    "s3","gcs","cloud storage","cloudfront","cloudflare",
+    # Data Eng / Platform
+    "spark","flink","beam","kafka streams","dbt","airflow","dagster","orchestration",
+    "parquet","avro","delta lake","iceberg","hudi","lakehouse",
+    "snowflake","redshift","bigquery","presto","trino","hive","clickhouse",
+    # Databases / Caches / Search
+    "postgres","mysql","mariadb","sqlite","redis","memcached","mongo","cassandra","dynamodb","bigtable",
+    "elasticsearch","opensearch","timescaledb","influxdb","neo4j","graph db",
+    # ML / AI
+    "llm","large language model","transformer","bert","gpt","rag","retrieval augmented generation","vector db",
+    "embeddings","tokenization","sentence transformers","langchain","llamaindex",
+    "faiss","pinecone","weaviate","milvus","chroma",
+    "pytorch","tensorflow","sklearn","xgboost","lightgbm","catboost","onnx","torchserve","triton",
+    "mlflow","kubeflow","sagemaker","ray","feature store","feast",
+    # Analytics
+    "experimentation","a/b testing","ab testing","causal inference","sql window functions","cohort analysis","retention","funnel analysis",
+    # Frontend
+    "next.js","vue","angular","svelte","redux","rtk","rtk query","zustand","mobx","rxjs","webpack","vite",
+    "jest","testing library","cypress","playwright","storybook","tailwindcss","scss","sass","css modules","a11y","accessibility","ssr","isr",
+    # iOS / Android
+    "swift","swiftui","combine","uikit","objective-c","cocoapods","carthage","spm","alamofire","mvvm","xcuitest",
+    "kotlin","java","jetpack compose","coroutines","flow","dagger","hilt","koin","retrofit","room","espresso",
+    # Security
+    "owasp","sast","dast","sca","threat modeling","pentest","bug bounty","semgrep","burp suite","zap",
+    "iam","kms","secrets management","vault","mfa","zero trust","saml","oauth2","oidc",
+]
+
+# Canonicalize common synonyms and spelling variants used across company JDs
+CANON_SKILLS = {
+    # languages & runtimes
+    "golang":"go","go lang":"go","nodejs":"node","node.js":"node","c sharp":"c#","c plus plus":"c++",
+    # k8s & infra
+    "k8s":"kubernetes","eks":"kubernetes","gke":"kubernetes","aks":"kubernetes","argocd":"argo cd","argo-cd":"argo cd",
+    "ci/cd":"cicd","ci-cd":"cicd",
+    # api & auth
+    "oauth 2.0":"oauth2","open telemetry":"opentelemetry","o11y":"observability",
+    # data / lakehouse
+    "delta":"delta lake","apache iceberg":"iceberg",
+    # ml/ai
+    "large language model":"llm","retrieval augmented generation":"rag","vector database":"vector db",
+    # frontend
+    "redux toolkit":"rtk","rtk-query":"rtk query","tailwind":"tailwindcss",
+    # misc
+    "micro services":"microservices","micro-services":"microservices","SRE":"sre"
+}
+
 SMART_EXCLUDE_BASE = [
     "intern", "internship", "fellow", "bootcamp", "student", "professor",
     "sales", "marketing", "hr", "talent acquisition", "recruiter",
@@ -639,17 +695,16 @@ if st.session_state.get("built"):
                             skills.update(v.get(k, []))
                     return sorted(skills)
                 GLOBAL_SKILLS = _flatten_role_lib()
+                # include global extras
+                GLOBAL_SKILLS = sorted(set(GLOBAL_SKILLS) | set(GLOBAL_SKILLS_EXTRA))
                 # canonicalize common variants
-                CANON = {
-                    "golang":"go","nodejs":"node","node.js":"node","c sharp":"c#","c plus plus":"c++",
-                    "objective c":"objective‑c","objective-c":"objective‑c","typescript":"typescript",
-                }
+                CANON = CANON_SKILLS
                 text = (jd_text or "").lower()
                 # fast not-term detection
                 auto_not = []
                 for kw in ["intern","internship","contract","temporary","unpaid","help desk","desktop support","qa tester","graphic designer","sales","marketing"]:
                     if kw in text: auto_not.append(kw)
-                tokens = re.findall(r"[a-zA-Z+#\.\-]+", text)
+                tokens = re.findall(r"[a-zA-Z0-9+#\.\-/]+", text)
                 def canon(tok: str) -> str:
                     t = tok.lower().replace("_"," ").replace("-"," ")
                     t = CANON.get(t, t)
@@ -658,7 +713,11 @@ if st.session_state.get("built"):
                 counts = {s:0 for s in GLOBAL_SKILLS}
                 for s in GLOBAL_SKILLS:
                     c = canon(s)
-                    counts[s] = norm.count(c)
+                    # phrase or special-char skills: count in full text
+                    if (" " in c) or any(ch in c for ch in ["#","+",".","-","/"]):
+                        counts[s] = len(re.findall(re.escape(c), text))
+                    else:
+                        counts[s] = norm.count(c)
                 ranked = [s for s,_c in sorted(counts.items(), key=lambda x: x[1], reverse=True) if _c>0]
                 must_ex = ranked[:8]
                 nice_ex = ranked[8:16]
