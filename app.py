@@ -24,7 +24,7 @@ from typing import List, Dict
 from urllib.parse import urlencode, quote_plus
 
 # --- Streamlit rerun helper for compatibility across versions ---
-def _safe_rerun():
+def st.session_state["just_extracted"] = True:
     rr = getattr(st, "rerun", None)
     if callable(rr):
         rr()
@@ -669,6 +669,28 @@ if st.session_state.get("built"):
                     st.session_state["edited_titles"] = list(dict.fromkeys(enriched))
                 st.session_state["jd_not"] = list(dict.fromkeys(st.session_state.get("jd_not", []) + auto_not))
                 _safe_rerun()
+
+        # ---- Refresh from session (so JD extract applies without rerun) ----
+        titles = st.session_state.get("edited_titles", titles)
+        must = st.session_state.get("edited_must", must)
+        nice = st.session_state.get("edited_nice", nice)
+        selected_extras = st.session_state.get("selected_extras", selected_extras)
+        include_extras_core = st.session_state.get("include_extras_core", include_extras_core)
+        if st.session_state.pop("just_extracted", False):
+            st.success("Extracted skills from JD and applied ✅")
+
+        # Build strings now, after any JD extraction or edits
+        li_title = or_group(titles)
+        core_terms = must + nice + (selected_extras if include_extras_core else [])
+        li_kw_core = or_group(core_terms)
+        jd_not_terms = st.session_state.get("jd_not", [])
+        nots = SMART_EXCLUDE_BASE + R.get("false_pos", []) + jd_not_terms + [t.strip() for t in (extra_not or "").split(",") if t.strip()]
+        li_keywords = f"{li_kw_core} NOT (" + " OR ".join(nots) + ")" if nots else li_kw_core
+        expanded_keywords = build_expanded_keywords(must, nice, R.get("frameworks", []), R.get("clouds", []), R.get("databases", []))
+        skills_must_csv = ", ".join(must)
+        skills_nice_csv = ", ".join(nice)
+        skills_all_csv = ", ".join(list(dict.fromkeys(must + nice)))
+        score = confidence_score(titles, must, nice)
 
         # ---- Inline editors & chips (Customize) ----
         with st.expander("✏️ Customize titles & skills (live)", expanded=False):
