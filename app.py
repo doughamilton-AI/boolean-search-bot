@@ -24,7 +24,14 @@ from typing import List, Dict
 from urllib.parse import urlencode, quote_plus
 
 # --- Streamlit rerun helper for compatibility across versions ---
-def st.session_state["just_extracted"] = True:
+def _safe_rerun():
+    rr = getattr(st, "rerun", None)
+    if callable(rr):
+        rr()
+    else:
+        rr2 = getattr(st, "experimental_rerun", None)
+        if callable(rr2):
+            rr2()
     rr = getattr(st, "rerun", None)
     if callable(rr):
         rr()
