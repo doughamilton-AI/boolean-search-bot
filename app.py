@@ -1,5 +1,6 @@
 # AI Sourcing Assistant
 
+
 """
 A colorful, senior‑recruiter‑friendly sourcing assistant. Enter **any job title** (e.g.,
 "Senior iOS Engineer", "Security Engineer", "Product Designer", "Solutions Architect"),
@@ -13,21 +14,14 @@ and get an instant sourcing pack:
 • Outreach Hooks: value‑prop angles and first‑line starters (skills‑based only)
 • Checklist & Export: pre‑launch QA + one‑click export of the entire pack
 
-New in this version:
-• **JD Paste → Auto‑extract** titles/skills/NOTs to prefill the editors
-• **Share Link**: encode your current setup into the URL (copyable)
-• **LinkedIn Deep‑Link**: open People Search prefilled with your Keywords
-
 No external APIs; safe for Streamlit Cloud. Ethical sourcing only — focus on skills & experience.
 """
 
 import re
-import json
-from urllib.parse import quote_plus, urlencode
 import streamlit as st
 import streamlit.components.v1 as components
 from typing import List, Dict
-from difflib import SequenceMatcher
+from urllib.parse import urlencode, quote_plus
 
 # --- Streamlit rerun helper for compatibility across versions ---
 def _safe_rerun():
@@ -39,35 +33,9 @@ def _safe_rerun():
         if callable(rr2):
             rr2()
 
-# --- Query params helpers (support old/new Streamlit APIs) ---
-def _get_query_params() -> Dict[str, List[str]]:
-    qp_obj = getattr(st, "query_params", None)
-    try:
-        # streamlit>=1.33
-        if qp_obj is not None:
-            return dict(qp_obj)
-    except Exception:
-        pass
-    gp = getattr(st, "experimental_get_query_params", None)
-    if callable(gp):
-        return dict(gp())
-    return {}
-
-def _set_query_params(**kwargs):
-    qp_obj = getattr(st, "query_params", None)
-    try:
-        if qp_obj is not None:
-            qp_obj.clear()
-            for k, v in kwargs.items():
-                qp_obj[k] = v
-            return
-    except Exception:
-        pass
-    sp = getattr(st, "experimental_set_query_params", None)
-    if callable(sp):
-        sp(**kwargs)
 
 # ============================= Role Library =============================
+# Category‑level presets (used for any job title via fuzzy mapping)
 ROLE_LIB: Dict[str, Dict] = {
     "swe": {
         "titles": ["Software Engineer", "Software Developer", "Full Stack Engineer", "Backend Engineer", "Frontend Engineer", "Platform Engineer"],
@@ -273,10 +241,57 @@ SMART_EXCLUDE_BASE = [
     "customer support", "qa tester", "help desk", "desktop support",
 ]
 
+# Query param helpers (share/load)
+
+def _get_query_params_compat():
+    try:
+        return dict(st.query_params)
+    except Exception:
+        try:
+            return st.experimental_get_query_params()
+        except Exception:
+            return {}
+
+def _init_from_query_params():
+    if st.session_state.get("built"):
+        return
+    qp = _get_query_params_compat()
+    if not qp:
+        return
+    def _p(key, default=""):
+        v = qp.get(key, default)
+        if isinstance(v, list):
+            return v[0] if v else default
+        return v
+    role = _p("role", "")
+    cat = _p("cat", "")
+    titles = [t for t in _p("titles", "").split("|") if t]
+    must = [s.strip() for s in _p("must", "").split(",") if s.strip()]
+    nice = [s.strip() for s in _p("nice", "").split(",") if s.strip()]
+    nots = [s.strip() for s in _p("not", "").split(",") if s.strip()]
+    extras = [s for s in _p("extras", "").split("|") if s]
+    include_extras = _p("inc", "0") == "1"
+    loc = _p("loc", "")
+    if role or titles or must or nice:
+        if not cat:
+            cat = map_title_to_category_any(role)
+        st.session_state["built"] = True
+        st.session_state["any_title"] = role
+        st.session_state["location"] = loc
+        st.session_state["cat"] = cat
+        base_titles = ROLE_LIB.get(cat, {}).get("titles", [])
+        st.session_state["edited_titles"] = titles or expand_titles(base_titles, cat)
+        st.session_state["edited_must"] = must or ROLE_LIB.get(cat, {}).get("must", [])
+        st.session_state["edited_nice"] = nice or ROLE_LIB.get(cat, {}).get("nice", [])
+        st.session_state["selected_extras"] = extras
+        st.session_state["include_extras_core"] = include_extras
+        st.session_state["jd_not"] = nots
+
 # ============================= Helpers =============================
 
 def map_title_to_category(title: str) -> str:
     t = (title or "").lower()
+    # Strong keyword checks
     if any(k in t for k in ["sre", "site reliability", "production engineering", "production engineer", "reliability engineer"]):
         return "sre"
     if any(k in t for k in ["ml ", "machine learning", "applied scientist", "llm", "data scientist", "computer vision", "nlp"]):
@@ -303,8 +318,10 @@ def map_title_to_category(title: str) -> str:
         return "pm"
     if any(k in t for k in ["designer", "ux", "ui", "interaction designer", "product designer"]):
         return "design"
+    # Generic SWE fallback
     if any(k in t for k in ["engineer", "developer", "software", "programmer", "coder", "full stack", "full-stack", "fullstack"]):
         return "swe"
+    # Default to PM as a neutral non‑coding role
     return "pm"
 
 
@@ -332,7 +349,9 @@ def title_abbrevs_for(cat: str) -> List[str]:
 
 
 def expand_titles(base_titles: List[str], cat: str) -> List[str]:
+    """Add common abbreviations without changing seniority mix."""
     ext = list(dict.fromkeys(base_titles + title_abbrevs_for(cat)))
+    # de‑dupe, keep order
     seen = set()
     out = []
     for x in ext:
@@ -342,16 +361,18 @@ def expand_titles(base_titles: List[str], cat: str) -> List[str]:
     return out
 
 
-def build_booleens_legacy(titles, must, nice, location: str = "", add_not=True, extra_nots: List[str] = None):
-    # kept for reference (not used in UI now)
+def build_booleans(titles, must, nice, location: str = "", add_not=True, extra_nots: List[str] = None):
     li_title = or_group(titles)
     li_kw_core = or_group(must + nice)
     nots = SMART_EXCLUDE_BASE + (extra_nots or []) if add_not else []
     li_keywords = f"{li_kw_core} NOT (" + " OR ".join(nots) + ")" if nots else li_kw_core
+
+    # Variants kept out of Boolean Pack per UX request
     broad_kw = or_group(must[:4] + nice[:2])
     focused_kw = or_group(must[:6])
     broad = f"{or_group(titles[:4])} AND {broad_kw}"
     focused = f"{or_group(titles)} AND {focused_kw}"
+
     return li_title, li_keywords, broad, focused
 
 
@@ -365,3 +386,509 @@ def confidence_score(titles: List[str], must: List[str], nice: List[str]) -> int
     score += min(30, len(must) * 5)
     score += min(15, len(nice) * 2)
     if len(titles) > 12 or len(must) + len(nice) > 20:
+        score -= 5
+    return max(10, min(100, score))
+
+# -------- Wider‑net fuzzy mapping (no regex in strings to keep deployment simple) --------
+from difflib import SequenceMatcher
+
+EXTRA_ALIASES = {
+    "swe": ["Software Programmer", "Programmer", "Software Dev", "Full Stack Developer", "Backend Developer", "Frontend Developer", "Platform Software Engineer"],
+    "frontend": ["Front-End Engineer", "UI Developer", "Web Developer", "React Developer", "Angular Developer"],
+    "backend": ["Back-End Engineer", "API Developer", "Services Engineer", "Platform Backend Engineer"],
+    "mobile_ios": ["iOS Software Engineer", "iOS Developer", "iPhone Developer"],
+    "mobile_android": ["Android Software Engineer", "Android Developer"],
+    "ml": ["ML Scientist", "Machine Learning Scientist", "AI Scientist", "NLP Scientist", "CV Engineer"],
+    "data_eng": ["ETL Developer", "Data Pipeline Engineer", "Big Data Engineer", "Data Infrastructure"],
+    "data_analyst": ["Growth Analyst", "Product Data Analyst", "BI Developer"],
+    "pm": ["Product Owner", "TPM", "Technical Program Manager", "Program Manager"],
+    "design": ["UX/UI Designer", "Product Design", "Interaction Designer"],
+    "sre": ["Production Engineer", "Reliability Engineer", "DevOps SRE", "Systems Reliability Engineer"],
+    "devops": ["Cloud Engineer", "Infrastructure Engineer", "Build Engineer", "Release Engineer", "Platform Engineer (DevOps)"],
+    "security": ["Application Security Engineer", "Product Security Engineer", "Cloud Security Engineer"],
+    "solutions_arch": ["Solutions Consultant", "Sales Engineer", "Customer Engineer", "Field Engineer"],
+}
+
+
+def _normalize_title(s: str) -> str:
+    s = (s or "").lower()
+    # strip common seniority tokens
+    for w in [" sr ", " senior ", " staff ", " principal ", " lead ", " junior ", " ii ", " iii ", " iv ", " i "]:
+        s = s.replace(w, " ")
+    # keep only letters and spaces
+    cleaned = []
+    for ch in s:
+        if ch.isalpha() or ch.isspace():
+            cleaned.append(ch)
+        else:
+            cleaned.append(" ")
+    s = "".join(cleaned)
+    while "  " in s:
+        s = s.replace("  ", " ")
+    return s.strip()
+
+
+def _all_aliases_for(cat: str) -> List[str]:
+    base = ROLE_LIB.get(cat, {}).get("titles", [])
+    return base + title_abbrevs_for(cat) + EXTRA_ALIASES.get(cat, [])
+
+
+def guess_category_fuzzy(title: str) -> str:
+    tnorm = _normalize_title(title)
+    best_cat, best_score = None, 0.0
+    for cat in ROLE_LIB.keys():
+        for alias in _all_aliases_for(cat):
+            score = SequenceMatcher(None, tnorm, _normalize_title(alias)).ratio()
+            if score > best_score:
+                best_score, best_cat = score, cat
+    if best_score >= 0.42:
+        return best_cat
+    # Token overlap fallback
+    tokens = set(tnorm.split())
+    best_cat2, best_overlap = None, -1
+    for cat in ROLE_LIB.keys():
+        alias_tokens = set()
+        for alias in _all_aliases_for(cat):
+            alias_tokens.update(_normalize_title(alias).split())
+        overlap = len(tokens & alias_tokens)
+        if overlap > best_overlap:
+            best_overlap, best_cat2 = overlap, cat
+    return best_cat2 or "pm"
+
+
+def map_title_to_category_any(title: str) -> str:
+    primary = map_title_to_category(title)
+    if primary == "pm" and title:
+        return guess_category_fuzzy(title)
+    return primary
+
+# ============================= Theming =============================
+PALETTES = {
+    "Indigo → Pink": {"bg":"linear-gradient(90deg,#4f46e5,#db2777)", "chip":"#eef2ff", "accent":"#4f46e5"},
+    "Emerald → Teal": {"bg":"linear-gradient(90deg,#059669,#14b8a6)", "chip":"#ecfdf5", "accent":"#059669"},
+    "Amber → Rose": {"bg":"linear-gradient(90deg,#f59e0b,#f43f5e)", "chip":"#fffbeb", "accent":"#f59e0b"},
+}
+
+# ============================= UI =============================
+st.set_page_config(page_title="AI Sourcing Assistant", page_icon="🎯", layout="wide")
+
+col_theme, _ = st.columns([1,6])
+with col_theme:
+    theme_choice = st.selectbox("Theme", list(PALETTES.keys()), index=0)
+P = PALETTES[theme_choice]
+
+CSS = f"""
+<style>
+.header {{
+  background: {P['bg']};
+  color: white; padding: 18px 22px; border-radius: 18px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.12);
+}}
+.card {{ border:1px solid #e6e6e6; padding:1rem; border-radius:16px; box-shadow:0 1px 2px rgba(0,0,0,.06); }}
+.badge {{ display:inline-block; padding:.25rem .6rem; margin:.2rem; border-radius:999px; background:{P['chip']}; font-size:.85rem }}
+.kicker {{ opacity:.9; font-size:.95rem; margin-bottom:.25rem }}
+.h2 {{ font-weight:800; font-size:1.35rem; margin:.25rem 0 .5rem }}
+.small {{ opacity:.9; font-size:.9rem }}
+.primary {{ color:{P['accent']}; font-weight:700 }}
+.subcap {{ color:#6b7280; font-size:.9rem; margin-top:.25rem }}
+.btncopy {{ background:{P['accent']}; color:white; border:none; border-radius:10px; padding:.35rem .6rem; font-size:.85rem; cursor:pointer; }}
+.btncopy:hover {{ opacity:.95 }}
+.textarea {{ width:100%; resize:vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; padding:.85rem 1rem; border-radius:12px; border:1px solid #e5e7eb; background:#ffffff; min-height:160px; font-size:15px; line-height:1.45; box-shadow: inset 0 1px 2px rgba(0,0,0,.04); }} 
+.textarea:focus {{ outline:none; border-color:#a5b4fc; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }}
+.blocktitle {{ font-weight:700; margin-bottom:.4rem }}
+.grid {{ display:grid; grid-template-columns: 1fr 1fr; gap: 14px; }}
+.grid-full {{ display:grid; grid-template-columns: 1fr; gap: 14px; }}
+.cardlite {{ border:1px solid #eaeaea; padding:1rem; border-radius:14px; background: linear-gradient(180deg,#ffffff,#f9fafb); box-shadow: 0 6px 18px rgba(0,0,0,.06); }}
+</style>
+"""
+st.markdown(CSS, unsafe_allow_html=True)
+
+st.markdown("""
+<div class="header">
+  <div class="kicker">AI‑forward recruiting utility</div>
+  <div class="h2">🎯 AI Sourcing Assistant</div>
+  <div class="small">Paste results into LinkedIn. Boolean Pack focuses on <b>Titles</b>, <b>Keywords</b>, and <b>Skills</b> for quick copy.</div>
+</div>
+""", unsafe_allow_html=True)
+
+# ---------- Tiny HTML copy card helper ----------
+
+def _html_escape(s: str) -> str:
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def copy_card(title: str, value: str, key: str, rows_hint: int = 8):
+    value = _html_escape(value or "")
+    # Bigger, prettier boxes — estimate rows generously
+    lines = max(1, len(value.splitlines()))
+    ors = value.count(" OR ")
+    commas = value.count(",")
+    longness = max(lines, (ors // 2) + (commas // 10) + 5)
+    est = max(rows_hint, min(20, longness))
+    html = f"""
+    <div class='cardlite'>
+      <div style='display:flex;justify-content:space-between;align-items:center;'>
+        <div class='blocktitle'>{title}</div>
+        <button class='btncopy' onclick=\"navigator.clipboard.writeText(document.getElementById('{key}').value)\">Copy</button>
+      </div>
+      <textarea id='{key}' class='textarea' rows='{est}'>{value}</textarea>
+    </div>
+    """
+    # Height: roomier visuals
+    components.html(html, height=est * 32 + 120)
+
+st.write("")
+colA, colB, colC = st.columns([3,2,2])
+with colA:
+    any_title = st.text_input("Job title (anything!)", placeholder="e.g., Senior Security Engineer in NYC")
+with colB:
+    location = st.text_input("Location (optional)", placeholder="e.g., New York, Remote")
+with colC:
+    # Fallback for older Streamlit versions (some builds don't have st.toggle)
+    toggle_widget = getattr(st, "toggle", st.checkbox)
+    use_exclude = toggle_widget("Smart NOT", value=True, help="Auto‑exclude interns, recruiters, help desk, etc.")
+    if not hasattr(st, "toggle"):
+        st.caption("Using checkbox fallback — upgrade Streamlit to enable the toggle UI.")
+
+extra_not = st.text_input("Custom NOT terms (comma‑separated)", placeholder="e.g., contractor, internship")
+extra_not_list = [t.strip() for t in extra_not.split(",") if t.strip()]
+
+# Initialize from share link if present
+_init_from_query_params()
+
+build_clicked = st.button("✨ Build sourcing pack", type="primary")
+if build_clicked:
+    # Persist a baseline so edits survive reruns
+    cat_tmp = map_title_to_category_any(any_title)
+    st.session_state["built"] = True
+    st.session_state["cat"] = cat_tmp
+    st.session_state["any_title"] = any_title
+    st.session_state["location"] = location
+    st.session_state["use_exclude"] = use_exclude
+    # Seed editable lists from the role library
+    R0 = ROLE_LIB[cat_tmp]
+    st.session_state["edited_titles"] = expand_titles(R0["titles"], cat_tmp)
+    st.session_state["edited_must"] = R0["must"]
+    st.session_state["edited_nice"] = R0["nice"]
+    st.session_state["selected_extras"] = []  # frameworks/clouds/dbs to optionally add to Core
+    st.session_state["include_extras_core"] = False
+    _safe_rerun()
+
+if st.session_state.get("built"):
+    # ===== Rebuild strings from current (possibly edited) lists =====
+    cat = st.session_state.get("cat")
+    R = ROLE_LIB[cat]
+
+    # Live lists (editable)
+    titles = st.session_state.get("edited_titles", expand_titles(R["titles"], cat))
+    must = st.session_state.get("edited_must", R["must"])
+    nice = st.session_state.get("edited_nice", R["nice"])
+
+    # Extras to widen/narrow volume
+    extras_options = list(dict.fromkeys(R.get("frameworks", []) + R.get("clouds", []) + R.get("databases", [])))
+    selected_extras = st.session_state.get("selected_extras", [])
+    include_extras_core = st.session_state.get("include_extras_core", False)
+
+    # Build strings (respect Smart NOT + custom NOT on every run)
+    # Title
+    li_title = or_group(titles)
+    # Keywords (Core)
+    core_terms = must + nice + (selected_extras if include_extras_core else [])
+    li_kw_core = or_group(core_terms)
+    jd_not_terms = st.session_state.get("jd_not", [])
+    nots = SMART_EXCLUDE_BASE + R.get("false_pos", []) + jd_not_terms + [t.strip() for t in (extra_not or "").split(",") if t.strip()]
+    li_keywords = f"{li_kw_core} NOT (" + " OR ".join(nots) + ")" if nots else li_kw_core
+
+    # Expanded keywords stay broad (full stack + clouds + dbs)
+    expanded_keywords = build_expanded_keywords(must, nice, R.get("frameworks", []), R.get("clouds", []), R.get("databases", []))
+
+    # CSV skills for LinkedIn Skills filter
+    skills_must_csv = ", ".join(must)
+    skills_nice_csv = ", ".join(nice)
+    skills_all_csv = ", ".join(list(dict.fromkeys(must + nice)))
+
+    score = confidence_score(titles, must, nice)
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Titles covered", f"{len(titles)}")
+    m2.metric("Skills (must/nice)", f"{len(must)}/{len(nice)}")
+    m3.metric("Confidence", f"{score}/100")
+
+    tabs = st.tabs([
+        "🎯 Boolean Pack", "🧠 Role Intel", "🌐 Signals", "🏢 Company Maps", "🚦 Filters", "💌 Outreach", "✅ Checklist", "⬇️ Export"
+    ])
+
+    # -------------------- Tab 1: Boolean Pack (Titles, Keywords, Skills only) --------------------
+    with tabs[0]:
+        # ---- 📄 Paste JD → Auto-extract ----
+        with st.expander("📄 Paste Job Description → Auto-extract", expanded=False):
+            jd_text = st.text_area("Paste the full JD (optional)", height=220, placeholder="Paste the role's Responsibilities/Requirements/Preferred sections here…")
+            if st.button("Extract from JD", key="extract_jd"):
+                # Simple extraction based on global skills frequency; prioritizes 'requirements' terms
+                def _flatten_role_lib():
+                    skills = set()
+                    for v in ROLE_LIB.values():
+                        for k in ("must","nice","frameworks","clouds","databases"):
+                            skills.update(v.get(k, []))
+                    return sorted(skills)
+                GLOBAL_SKILLS = _flatten_role_lib()
+                # canonicalize common variants
+                CANON = {
+                    "golang":"go","nodejs":"node","node.js":"node","c sharp":"c#","c plus plus":"c++",
+                    "objective c":"objective‑c","objective-c":"objective‑c","typescript":"typescript",
+                }
+                text = (jd_text or "").lower()
+                # fast not-term detection
+                auto_not = []
+                for kw in ["intern","internship","contract","temporary","unpaid","help desk","desktop support","qa tester","graphic designer","sales","marketing"]:
+                    if kw in text: auto_not.append(kw)
+                tokens = re.findall(r"[a-zA-Z+#\.\-]+", text)
+                def canon(tok: str) -> str:
+                    t = tok.lower().replace("_"," ").replace("-"," ")
+                    t = CANON.get(t, t)
+                    return t
+                norm = [canon(t) for t in tokens]
+                counts = {s:0 for s in GLOBAL_SKILLS}
+                for s in GLOBAL_SKILLS:
+                    c = canon(s)
+                    counts[s] = norm.count(c)
+                ranked = [s for s,_c in sorted(counts.items(), key=lambda x: x[1], reverse=True) if _c>0]
+                must_ex = ranked[:8]
+                nice_ex = ranked[8:16]
+                st.session_state["edited_must"] = must_ex or st.session_state.get("edited_must", [])
+                st.session_state["edited_nice"] = nice_ex or st.session_state.get("edited_nice", [])
+                # keep titles from current category, but allow "Senior" if present
+                add_senior = any(w in text for w in ["senior","staff","principal","lead"])
+                base_titles = st.session_state.get("edited_titles", [])
+                if add_senior and base_titles:
+                    enriched = []
+                    for t in base_titles:
+                        if not t.lower().startswith("senior ") and "Senior" in t:
+                            enriched.append(t)
+                        enriched.append(t)
+                    st.session_state["edited_titles"] = list(dict.fromkeys(enriched))
+                st.session_state["jd_not"] = list(dict.fromkeys(st.session_state.get("jd_not", []) + auto_not))
+                _safe_rerun()
+
+        # ---- Inline editors & chips (Customize) ----
+        with st.expander("✏️ Customize titles & skills (live)", expanded=False):
+            col_ed1, col_ed2 = st.columns([1,1])
+            with col_ed1:
+                titles_text = st.text_area("Titles (one per line)", value="\n".join(titles), height=180)
+            with col_ed2:
+                must_text = st.text_area("Must-have skills (comma-separated)", value=", ".join(must), height=120)
+                nice_text = st.text_area("Nice-to-have skills (comma-separated)", value=", ".join(nice), height=120)
+            col_chip1, col_chip2 = st.columns([1,1])
+            with col_chip1:
+                selected_extras_new = st.multiselect("Optional extras (frameworks/clouds/dbs)", options=extras_options, default=selected_extras)
+            with col_chip2:
+                include_extras_core_new = st.checkbox("Include selected extras in Core Keywords", value=include_extras_core)
+            if st.button("Apply changes", key="apply_edits"):
+                st.session_state["edited_titles"] = [t.strip() for t in titles_text.splitlines() if t.strip()]
+                st.session_state["edited_must"] = [s.strip() for s in must_text.split(",") if s.strip()]
+                st.session_state["edited_nice"] = [s.strip() for s in nice_text.split(",") if s.strip()]
+                st.session_state["selected_extras"] = selected_extras_new
+                st.session_state["include_extras_core"] = include_extras_core_new
+                _safe_rerun()
+
+        # ---- Copy cards ----
+        ext_title = or_group(titles[:20])
+        grid1 = st.container()
+        with grid1:
+            st.markdown("<div class='grid'>", unsafe_allow_html=True)
+            copy_card("LinkedIn — Title (Current)", li_title, "copy_title_current", 10)
+            copy_card("LinkedIn — Title (Current) — Extended synonyms", ext_title, "copy_title_extended", 10)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        grid2 = st.container()
+        with grid2:
+            st.markdown("<div class='grid'>", unsafe_allow_html=True)
+            copy_card("LinkedIn — Keywords (Core)", li_keywords, "copy_kw_core", 12)
+            copy_card("LinkedIn — Keywords (Expanded)", expanded_keywords, "copy_kw_expanded", 12)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        grid3 = st.container()
+        with grid3:
+            st.markdown("<div class='grid'>", unsafe_allow_html=True)
+            copy_card("LinkedIn — Skills (Must, CSV)", skills_must_csv, "copy_sk_must", 8)
+            copy_card("LinkedIn — Skills (Nice‑to‑have, CSV)", skills_nice_csv, "copy_sk_nice", 8)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        grid4 = st.container()
+        with grid4:
+            st.markdown("<div class='grid-full'>", unsafe_allow_html=True)
+            copy_card("LinkedIn — Skills (All, CSV)", skills_all_csv, "copy_sk_all", 10)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        # ---- Copy All bundle ----
+        copy_all = f"""Title (Current):
+{li_title}
+
+Title (Extended):
+{ext_title}
+
+Keywords (Core):
+{li_keywords}
+
+Keywords (Expanded):
+{expanded_keywords}
+
+Skills (All CSV):
+{skills_all_csv}
+"""
+        st.markdown("<div class='grid-full'>", unsafe_allow_html=True)
+        copy_card("Copy All — Titles + Keywords + Skills", copy_all, "copy_all_bundle", 14)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # ---- 🔗 Quick Actions ----
+        st.markdown("### 🔗 Quick Actions")
+        try:
+            ln_preview_url = "https://www.linkedin.com/search/results/people/?keywords=" + quote_plus(li_keywords)
+            if hasattr(st, "link_button"):
+                st.link_button("🔎 Preview on LinkedIn", ln_preview_url)
+            else:
+                st.markdown(f"[🔎 Preview on LinkedIn]({ln_preview_url})")
+        except Exception:
+            pass
+        params = {
+            "role": st.session_state.get("any_title",""),
+            "cat": cat,
+            "titles": "|".join([t for t in titles if t]),
+            "must": ",".join(must),
+            "nice": ",".join(nice),
+            "not": ",".join(st.session_state.get("jd_not", []) + [t.strip() for t in (extra_not or "").split(",") if t.strip()]),
+            "extras": "|".join(selected_extras),
+            "inc": "1" if include_extras_core else "0",
+            "loc": st.session_state.get("location","") or "",
+        }
+        qs = urlencode(params, doseq=False)
+        share_html = f"""
+        <div class='cardlite'>
+          <div style='display:flex;justify-content:space-between;align-items:center;'>
+            <div class='blocktitle'>Shareable link</div>
+            <button class='btncopy' onclick=\"navigator.clipboard.writeText(document.getElementById('share_url').value)\">Copy</button>
+          </div>
+          <textarea id='share_url' class='textarea' rows='2'></textarea>
+          <script>
+            const qs = "{qs}";
+            const base = window.location.origin + window.location.pathname;
+            const url = base + "?" + qs;
+            document.getElementById('share_url').value = url;
+          </script>
+        """
+        components.html(share_html, height=170)
+
+        # ---- 🧪 String Health ----
+        def _paren_ok(s: str) -> bool:
+            depth = 0
+            for ch in s:
+                if ch == '(': depth += 1
+                elif ch == ')':
+                    depth -= 1
+                    if depth < 0: return False
+            return depth == 0
+        def _terms_from_or_group(g: str):
+            g = g.strip()
+            if g.startswith('(') and g.endswith(')'):
+                g = g[1:-1]
+            parts = [p.strip().strip('"').lower() for p in g.split(' OR ') if p.strip()]
+            seen, dups = set(), set()
+            for p in parts:
+                if p in seen: dups.add(p)
+                else: seen.add(p)
+            return parts, dups
+        core_part = li_keywords.split(" NOT ")[0].strip()
+        title_terms, title_dups = _terms_from_or_group(li_title)
+        core_terms_list, core_dups = _terms_from_or_group(core_part)
+        health_cols = st.columns(4)
+        health_cols[0].metric("Chars (Keywords)", len(li_keywords))
+        health_cols[1].metric("OR count", li_keywords.count(" OR "))
+        health_cols[2].metric("Title terms", len(title_terms))
+        health_cols[3].metric("Dupes in Core", len(core_dups))
+        issues = []
+        if len(li_keywords) > 500: issues.append("Keywords are long; consider trimming to < 500 chars")
+        if li_keywords.count(" OR ") > 60: issues.append("High OR count; remove niche or redundant terms")
+        if not _paren_ok(li_keywords): issues.append("Unbalanced parentheses; copy fresh from cards")
+        if core_dups: issues.append("Duplicate core terms: " + ", ".join(sorted(core_dups)))
+        if issues:
+            st.warning("\n".join([f"• {x}" for x in issues]))
+        else:
+            st.success("String looks healthy and ready to paste into LinkedIn.")
+
+    # -------------------- Tab 2: Role Intel --------------------
+    with tabs[1]:
+        st.markdown("<span class='kicker'>Must‑have</span>", unsafe_allow_html=True)
+        st.markdown(" ".join([f"<span class='badge'>{s}</span>" for s in must]), unsafe_allow_html=True)
+        st.markdown("<span class='kicker' style='margin-top:.6rem'>Nice‑to‑have</span>", unsafe_allow_html=True)
+        st.markdown(" ".join([f"<span class='badge'>{s}</span>" for s in nice]), unsafe_allow_html=True)
+        st.markdown("<span class='kicker' style='margin-top:.6rem'>Frameworks/Stacks</span>", unsafe_allow_html=True)
+        st.markdown(" ".join([f"<span class='badge'>{s}</span>" for s in R.get("frameworks", [])]), unsafe_allow_html=True)
+        st.markdown("<span class='kicker' style='margin-top:.6rem'>Clouds & Databases</span>", unsafe_allow_html=True)
+        st.markdown(" ".join([f"<span class='badge'>{s}</span>" for s in R.get("clouds", []) + R.get("databases", [])]), unsafe_allow_html=True)
+        st.markdown("<span class='kicker' style='margin-top:.6rem'>Related titles & seniority</span>", unsafe_allow_html=True)
+        st.markdown(" ".join([f"<span class='badge'>{t}</span>" for t in R.get("titles", []) + R.get("seniority", [])]), unsafe_allow_html=True)
+
+    # -------------------- Tab 3: Signals --------------------
+    with tabs[2]:
+        sig = R.get("signals", {})
+        if sig.get("github"):
+            gh = "site:github.com (developer OR engineer) (" + " OR ".join([s for s in (must + nice) if s in ["python","javascript","typescript","go","java","c++","rust","kotlin","swift"]][:6]) + ")"
+            if gh:
+                st.markdown("**GitHub**")
+                st.code(gh, language="text")
+                st.text_input("Copy GitHub X‑ray", value=gh, label_visibility="collapsed")
+        if sig.get("stackoverflow"):
+            so = "site:stackoverflow.com/users (developer OR engineer) (" + " OR ".join((must + nice)[:6]) + ")"
+            st.markdown("**Stack Overflow**")
+            st.code(so, language="text")
+            st.text_input("Copy Stack Overflow X‑ray", value=so, label_visibility="collapsed")
+        if sig.get("kaggle"):
+            kg = "site:kaggle.com (Grandmaster OR Master OR Competitions) (" + " OR ".join([s for s in (must + nice) if s in ["pytorch","tensorflow","sklearn","xgboost","catboost"]][:5] or (must + nice)[:5]) + ")"
+            st.markdown("**Kaggle**")
+            st.code(kg, language="text")
+            st.text_input("Copy Kaggle X‑ray", value=kg, label_visibility="collapsed")
+        if sig.get("dribbble"):
+            db = "site:dribbble.com (Product Designer OR UX OR UI) (Figma OR prototype OR case study)"
+            st.markdown("**Dribbble**")
+            st.code(db, language="text")
+            st.text_input("Copy Dribbble X‑ray", value=db, label_visibility="collapsed")
+        if sig.get("behance"):
+            be = "site:behance.net (Product Design OR UX) (Figma OR prototype OR case study)"
+            st.markdown("**Behance**")
+            st.code(be, language="text")
+            st.text_input("Copy Behance X‑ray", value=be, label_visibility="collapsed")
+
+    # -------------------- Tab 4: Company Maps --------------------
+    with tabs[3]:
+        st.markdown("<div class='kicker'>Top companies</div>", unsafe_allow_html=True)
+        st.markdown(" ".join([f"<span class='badge'>{c}</span>" for c in R.get("top_companies", [])]), unsafe_allow_html=True)
+        st.markdown("<div class='kicker' style='margin-top:.6rem'>Adjacent / feeder companies</div>", unsafe_allow_html=True)
+        st.markdown(" ".join([f"<span class='badge'>{c}</span>" for c in R.get("adjacent", [])]), unsafe_allow_html=True)
+        st.markdown("<div class='kicker' style='margin-top:.6rem'>Team names to target</div>", unsafe_allow_html=True)
+        st.markdown(" ".join([f"<span class='badge'>{c}</span>" for c in R.get("team_names", [])]), unsafe_allow_html=True)
+
+    # -------------------- Tab 5: Filters --------------------
+    with tabs[4]:
+        st.markdown("""
+        **LinkedIn tips**
+        - **Title (Current):** use the Title boolean (standard first; extended if low volume)
+        - **Company:** include Top/Adjacent; exclude current employer if needed
+        - **Location:** add city/region; widen to country if volume is low
+        - **Experience:** pick a realistic band for the role’s level
+        - **Keywords:** use Core; try Expanded when targeting specific stacks
+        """)
+        fps = SMART_EXCLUDE_BASE + R.get("false_pos", []) + [t.strip() for t in (extra_not or "").split(",") if t.strip()]
+        st.markdown("<div class='kicker' style='margin-top:.6rem'>Common NOT terms</div>", unsafe_allow_html=True)
+        st.markdown(" ".join([f"<span class='badge'>{t}</span>" for t in fps]), unsafe_allow_html=True)
+
+    # -------------------- Tab 6: Outreach --------------------
+    with tabs[5]:
+        st.markdown("**Angles that resonate** (keep 1 short CTA)")
+        hooks = []
+        cat_icons = {"swe":"🧱","frontend":"🎨","backend":"🧩","mobile_ios":"📱","mobile_android":"🤖","ml":"🧪","data_eng":"🗄️","data_analyst":"📊","pm":"🧭","design":"✏️","sre":"🚦","devops":"⚙️","security":"🛡️","solutions_arch":"🧰"}
+        icon = cat_icons.get(cat, "✨")
+        if cat in ["swe","backend","frontend","devops","sre"]:
+            hooks = [
+                "Own a core service at scale; modern stack (K8s/Cloud)",
+                "Greenfield feature with autonomy & measurable impact",
+            ]
