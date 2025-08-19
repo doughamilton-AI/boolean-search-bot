@@ -32,13 +32,6 @@ def _safe_rerun():
         rr2 = getattr(st, "experimental_rerun", None)
         if callable(rr2):
             rr2()
-    rr = getattr(st, "rerun", None)
-    if callable(rr):
-        rr()
-    else:
-        rr2 = getattr(st, "experimental_rerun", None)
-        if callable(rr2):
-            rr2()
 
 
 # ============================= Role Library =============================
@@ -745,7 +738,42 @@ if st.session_state.get("built"):
         if st.session_state.pop("just_extracted", False):
             st.success("Extracted skills from JD and applied ✅")
 
-        # Build strings now, after any JD extraction or edits
+        # ---- Seniority pills (adjust Title sets & show LI guidance) ----
+        def _apply_seniority(titles_in: List[str], level: str) -> List[str]:
+            # Remove existing seniority words to form base
+            base = []
+            for t in titles_in:
+                b = t
+                for tok in ["Senior ", "Staff ", "Principal ", "Lead ", "Sr "]:
+                    b = b.replace(tok, "")
+                base.append(b.strip())
+            # Build per level
+            if level == "All levels":
+                out = titles_in + base
+            elif level == "Associate":
+                out = [f"Junior {b}" for b in base] + base
+            elif level == "Mid":
+                out = base
+            elif level == "Senior+":
+                out = [f"Senior {b}" for b in base] + base
+            else:  # Staff/Principal
+                out = [f"Staff {b}" for b in base] + [f"Principal {b}" for b in base] + [f"Lead {b}" for b in base] + base
+            # dedupe, keep order
+            seen, res = set(), []
+            for x in out:
+                xl = x.lower()
+                if xl not in seen:
+                    seen.add(xl); res.append(x)
+            return res[:24]
+
+        col_sv1, col_sv2 = st.columns([2,3])
+        with col_sv1:
+            seniority_level = st.radio("Seniority focus", ["All levels","Associate","Mid","Senior+","Staff/Principal"], horizontal=True, index=0)
+        with col_sv2:
+            st.caption("These pills reshape Title sets and inform Years of experience/Seniority you’ll pick in LinkedIn.")
+        titles = _apply_seniority(titles, seniority_level)
+
+        # Build strings now, after any JD extraction/edits/seniority
         li_title = or_group(titles)
         core_terms = must + nice + (selected_extras if include_extras_core else [])
         li_kw_core = or_group(core_terms)
@@ -784,8 +812,19 @@ if st.session_state.get("built"):
         grid1 = st.container()
         with grid1:
             st.markdown("<div class='grid'>", unsafe_allow_html=True)
-            copy_card("LinkedIn — Title (Current)", li_title, "copy_title_current", 10)
-            copy_card("LinkedIn — Title (Current) — Extended synonyms", ext_title, "copy_title_extended", 10)
+            copy_card("LinkedIn — Title (Current) • Paste into: People → Title (Current)", li_title, "copy_title_current", 10)
+            # Past titles: use extended synonyms for reach
+            li_title_past = ext_title
+            copy_card("LinkedIn — Title (Past) • Paste into: People → Title (Past)", li_title_past, "copy_title_past", 10)
+            st.markdown("</div>", unsafe_allow_html=True)
+        # Companies (Current/Past)
+        grid1b = st.container()
+        with grid1b:
+            st.markdown("<div class='grid'>", unsafe_allow_html=True)
+            company_current = or_group(R.get("top_companies", []))
+            company_past = or_group(R.get("top_companies", []) + R.get("adjacent", []))
+            copy_card("LinkedIn — Company (Current) • Paste into: People → Company (Current)", company_current, "copy_company_current", 8)
+            copy_card("LinkedIn — Company (Past) • Paste into: People → Company (Past)", company_past, "copy_company_past", 8)
             st.markdown("</div>", unsafe_allow_html=True)
 
         grid2 = st.container()
