@@ -1,3 +1,7 @@
+# app_bright.py — AI Sourcing Assistant (Bright, Accessible UI)
+# Copy this entire file into `app.py` (or set Streamlit main file path to `app_bright.py`).
+# Requires: streamlit==1.33.0
+
 import re
 from typing import List, Tuple
 import streamlit as st
@@ -97,8 +101,11 @@ def expand_titles(base_titles: List[str], cat: str) -> List[str]:
     return unique_preserve(base_titles + extra)
 
 
-def build_keywords(must: List[str], nice: List[str], nots: List[str]) -> str:
-    core = or_group(unique_preserve(must + nice))
+def build_keywords(must: List[str], nice: List[str], nots: List[str], qualifiers: List[str] = None) -> str:
+    base = unique_preserve(must + nice)
+    if qualifiers:
+        base = base + [q for q in qualifiers if q]
+    core = or_group(base)
     if not core:
         return ""
     nots2 = unique_preserve(nots)
@@ -179,56 +186,16 @@ def apply_seniority(titles: List[str], level: str) -> List[str]:
     return res[:24]
 
 
-# ============================ Theming & Density ============================
+# ============================ Bright Themes (no dark background) ============================
 THEMES = {
-    "Electric": {
-        "grad": "linear-gradient(135deg, #6366F1 0%, #22D3EE 100%)",
-        "bg": "#0B1021",
-        "card": "#111827",
-        "text": "#E5E7EB",
-        "muted": "#9CA3AF",
-        "ring": "#8B5CF6",
-        "button": "#4F46E5"
-    },
-    "Sunset": {
-        "grad": "linear-gradient(135deg, #F97316 0%, #F43F5E 100%)",
-        "bg": "#0F0A0A",
-        "card": "#1F2937",
-        "text": "#F3F4F6",
-        "muted": "#D1D5DB",
-        "ring": "#FB923C",
-        "button": "#F97316"
-    },
-    "Aqua": {
-        "grad": "linear-gradient(135deg, #06B6D4 0%, #34D399 100%)",
-        "bg": "#0A1216",
-        "card": "#0F172A",
-        "text": "#E2E8F0",
-        "muted": "#94A3B8",
-        "ring": "#22D3EE",
-        "button": "#06B6D4"
-    },
-    "Forest": {
-        "grad": "linear-gradient(135deg, #22C55E 0%, #3B82F6 100%)",
-        "bg": "#0A100D",
-        "card": "#111827",
-        "text": "#E5E7EB",
-        "muted": "#9CA3AF",
-        "ring": "#10B981",
-        "button": "#22C55E"
-    },
-}
-
-DENSITY = {
-    "Comfortable": {"gap": "22px", "pad": "16px", "radius": "18px", "codefs": "13px", "btnpad": "10px 16px"},
-    "Cozy":        {"gap": "14px", "pad": "12px", "radius": "14px", "codefs": "12px", "btnpad": "8px 14px"},
-    "Compact":     {"gap": "10px", "pad": "8px",  "radius": "12px", "codefs": "11px", "btnpad": "7px 12px"},
+    "Sky":    {"grad": "linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%)", "bg": "#F8FAFC", "card": "#FFFFFF", "text": "#0F172A", "muted": "#475569", "ring": "#3B82F6", "button": "#2563EB"},
+    "Coral":  {"grad": "linear-gradient(135deg, #FB7185 0%, #F59E0B 100%)", "bg": "#FFF7ED", "card": "#FFFFFF", "text": "#111827", "muted": "#6B7280", "ring": "#F97316", "button": "#F97316"},
+    "Mint":   {"grad": "linear-gradient(135deg, #34D399 0%, #22D3EE 100%)", "bg": "#ECFEFF", "card": "#FFFFFF", "text": "#0F172A", "muted": "#334155", "ring": "#10B981", "button": "#10B981"},
 }
 
 
-def inject_css(theme_name: str, density: str) -> None:
-    t = THEMES.get(theme_name, THEMES["Electric"])
-    d = DENSITY.get(density, DENSITY["Cozy"])
+def inject_css(theme_name: str) -> None:
+    t = THEMES.get(theme_name, THEMES["Sky"])
     parts = [
         "<style>",
         ":root {",
@@ -239,41 +206,37 @@ def inject_css(theme_name: str, density: str) -> None:
         "--muted: " + t["muted"] + ";",
         "--ring: " + t["ring"] + ";",
         "--btn: " + t["button"] + ";",
-        "--gap: " + d["gap"] + ";",
-        "--pad: " + d["pad"] + ";",
-        "--radius: " + d["radius"] + ";",
-        "--codefs: " + d["codefs"] + ";",
-        "--btnpad: " + d["btnpad"] + ";",
+        "--gap: 16px;",
+        "--pad: 14px;",
+        "--radius: 16px;",
+        "--codefs: 12.5px;",
+        "--btnpad: 9px 14px;",
         "}",
         ".stApp, [data-testid='stAppViewContainer'] {background: var(--bg); color: var(--text);}",
         "[data-testid='stHeader'] {background: transparent;}",
-        "/* Inputs */",
-        "input[type='text'], textarea {background: var(--card) !important; color: var(--text) !important; "
-        "border: 1px solid rgba(255,255,255,.07) !important; border-radius: var(--radius) !important;}",
-        "input[type='text']:focus, textarea:focus {outline: none !important; border-color: var(--ring) !important; "
-        "box-shadow: 0 0 0 3px rgba(99,102,241,.18) !important;}",
-        "/* Buttons */",
-        ".stButton>button, .stDownloadButton>button {"
-        "background: var(--btn); color: #0B1021; font-weight: 700; border: none; "
-        "padding: var(--btnpad); border-radius: 999px; box-shadow: 0 8px 24px rgba(0,0,0,.25);}",
-        ".stButton>button:hover, .stDownloadButton>button:hover {filter: brightness(1.05);}",
-        ".stButton>button:focus {outline: none; box-shadow: 0 0 0 3px rgba(99,102,241,.25);}",
-        "/* Code blocks */",
-        "pre, code {font-size: var(--codefs) !important;}",
-        "/* Cards & Grid */",
-        ".grid {display: grid; gap: var(--gap); grid-template-columns: repeat(12, 1fr);}",
-        ".card {grid-column: span 6; background: var(--card); border: 1px solid rgba(255,255,255,.06); "
-        "border-radius: var(--radius); padding: var(--pad); box-shadow: 0 10px 30px rgba(0,0,0,.35);}",
-        ".hero {padding: var(--pad); border-radius: var(--radius); background: var(--card); "
-        "border: 1px solid rgba(255,255,255,.06); box-shadow: 0 10px 30px rgba(0,0,0,.35); margin-bottom: var(--gap);}",
-        ".hero h1 {margin: 0; font-size: 28px; font-weight: 800; background: var(--grad); "
+        ".hero {padding: var(--pad); border-radius: var(--radius); background: var(--card); ",
+        "border: 1px solid rgba(0,0,0,.06); box-shadow: 0 6px 24px rgba(2,6,23,.06); margin-bottom: var(--gap);}",
+        ".hero h1 {margin: 0; font-size: 28px; font-weight: 800; background: var(--grad); ",
         "-webkit-background-clip: text; background-clip: text; color: transparent;}",
         ".chips {display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px;}",
-        ".chip {padding: 6px 10px; border-radius: 999px; font-size: 12px; color: var(--text); "
-        "background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08);}",
+        ".chip {padding: 6px 10px; border-radius: 999px; font-size: 12px; color: var(--text); ",
+        "background: rgba(2,6,23,.04); border: 1px solid rgba(2,6,23,.06);}",
+        "input[type='text'], textarea {background: var(--card) !important; color: var(--text) !important; ",
+        "border: 1px solid rgba(2,6,23,.08) !important; border-radius: var(--radius) !important;}",
+        "input[type='text']:focus, textarea:focus {outline: none !important; border-color: var(--ring) !important; ",
+        "box-shadow: 0 0 0 3px rgba(37,99,235,.18) !important;}",
+        ".stButton>button, .stDownloadButton>button {background: var(--btn); color: #FFFFFF; font-weight: 700; border: none; ",
+        "padding: var(--btnpad); border-radius: 999px; box-shadow: 0 10px 24px rgba(2,6,23,.12);}",
+        ".stButton>button:hover, .stDownloadButton>button:hover {filter: brightness(1.05);}",
+        ".stButton>button:focus {outline: none; box-shadow: 0 0 0 3px rgba(37,99,235,.25);}",
+        "pre, code {font-size: var(--codefs) !important;}",
+        ".grid {display: grid; gap: var(--gap); grid-template-columns: repeat(12, 1fr);}",
+        ".card {grid-column: span 6; background: var(--card); border: 1px solid rgba(2,6,23,.06); ",
+        "border-radius: var(--radius); padding: var(--pad); box-shadow: 0 6px 24px rgba(2,6,23,.06);}",
         ".hint {font-size: 12px; color: var(--muted); margin-top: 4px;}",
-        ".divider {height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent); margin: 8px 0;}",
-        ".pill {display:inline-block;padding:4px 10px;border-radius:999px;background: var(--grad); color:#0b0f19; font-weight:700; font-size:12px;}",
+        ".divider {height: 1px; background: linear-gradient(90deg, transparent, rgba(2,6,23,.15), transparent); margin: 8px 0;}",
+        ".tagrow {display:flex; gap:8px; flex-wrap:wrap;}",
+        ".tagbtn {background: rgba(2,6,23,.06); border: 1px solid rgba(2,6,23,.1); border-radius: 999px; padding: 6px 10px; font-size: 12px;}",
         "</style>",
     ]
     st.markdown("".join(parts), unsafe_allow_html=True)
@@ -303,26 +266,71 @@ def code_card(title: str, text: str, hint: str = "") -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-# ============================ Controls ============================
-c_theme, c_density, c_mode = st.columns([1, 1, 1])
-with c_theme:
-    theme_choice = st.selectbox("Theme", list(THEMES.keys()), index=0, help="Change the color system & gradients")
-with c_density:
-    density_choice = st.selectbox("Density", ["Comfortable", "Cozy", "Compact"], index=1, help="Change spacing, radius & code size")
-with c_mode:
-    mode_choice = st.selectbox("Mode", ["Quick", "Pro"], index=0, help="Quick shows essentials. Pro adds full controls.")
+# ============================ Predictive Suggestions ============================
+TITLE_SUGGESTIONS = {
+    "software": ["Software Engineer", "Full Stack Engineer", "Backend Engineer", "Frontend Engineer", "Platform Engineer"],
+    "machine": ["Machine Learning Engineer", "ML Engineer", "Applied Scientist", "AI Engineer", "Data Scientist"],
+    "reliab":  ["Site Reliability Engineer", "SRE", "Platform Reliability Engineer", "DevOps Engineer"],
+    "data":    ["Data Engineer", "Analytics Engineer", "Data Platform Engineer"],
+    "mobile":  ["iOS Engineer", "Android Engineer", "Mobile Engineer"],
+    "security":["Security Engineer", "Application Security Engineer", "Cloud Security Engineer"],
+}
 
-# apply theme & density
-inject_css(theme_choice, density_choice)
+COMMON_QUALIFIERS = ["highly scalable", "high throughput", "low latency", "real-time", "cloud-native", "mission critical"]
 
-# Inputs
+
+def suggest_titles(q: str) -> List[str]:
+    s = (q or "").lower()
+    hits: List[str] = []
+    for k, vals in TITLE_SUGGESTIONS.items():
+        if k in s:
+            for v in vals:
+                if v not in hits:
+                    hits.append(v)
+    if not hits:
+        # fallback by category
+        cat = map_title_to_category(q or "")
+        hits = ROLE_LIB.get(cat, {}).get("titles", [])[:6]
+    return hits[:8]
+
+
+# ============================ UI ============================
+# Theme selector (bright only)
+col_theme = st.columns([1])[0]
+with col_theme:
+    theme_choice = st.selectbox("Theme", list(THEMES.keys()), index=0, help="Bright color systems")
+inject_css(theme_choice)
+
+# Prominent search input row
+st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
 cA, cB = st.columns([3, 2])
 with cA:
-    job_title = st.text_input("Job title", placeholder="e.g., Site Reliability Engineer")
+    job_title = st.text_input("Search by job title", placeholder="e.g., Senior Machine Learning Engineer")
 with cB:
-    location = st.text_input("Location (optional)", placeholder="e.g., San Francisco Bay Area")
+    location = st.text_input("Location (optional)", placeholder="e.g., New York, Remote, Bay Area")
+
+# Predictive title suggestions under the search bar
+if job_title and len(job_title) >= 3:
+    sugg = suggest_titles(job_title)
+    if sugg:
+        st.caption("Suggested titles — click to add:")
+        btn_cols = st.columns(len(sugg)) if len(sugg) <= 6 else st.columns(6)
+        for i, title in enumerate(sugg[:6]):
+            if btn_cols[i].button(title, key="sugg_"+str(i)):
+                st.session_state["added_title"] = title
 
 extra_not = st.text_input("Extra NOT terms (comma-separated, optional)", placeholder="e.g., contractor, internship")
+
+# Quick filters that influence Keywords only
+cf1, cf2, cf3 = st.columns(3)
+with cf1:
+    level = st.selectbox("Seniority", ["All", "Associate", "Mid", "Senior+", "Staff/Principal"], index=0)
+with cf2:
+    env = st.selectbox("Work setting", ["Any", "On-site", "Hybrid", "Remote"], index=0)
+with cf3:
+    size = st.selectbox("Company size focus", ["Any", "Startup", "Growth", "Enterprise"], index=0)
+
+# Build button
 build = st.button("✨ Build sourcing pack")
 
 if build and job_title and job_title.strip():
@@ -331,7 +339,10 @@ if build and job_title and job_title.strip():
     st.session_state["location"] = location
     st.session_state["category"] = map_title_to_category(job_title)
     R = ROLE_LIB[st.session_state["category"]]
-    st.session_state["titles"] = expand_titles(R["titles"], st.session_state["category"])
+    titles_seed = expand_titles(R["titles"], st.session_state["category"])
+    if "added_title" in st.session_state:
+        titles_seed = unique_preserve([st.session_state["added_title"]] + titles_seed)
+    st.session_state["titles"] = titles_seed
     st.session_state["must"] = list(R["must"])
     st.session_state["nice"] = list(R["nice"])
 
@@ -345,75 +356,65 @@ if st.session_state.get("built"):
 
     st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
 
-    # Seniority pills (always visible post-build)
-    st.caption("Seniority focus adjusts the Title set for better precision.")
-    col_sp1, col_sp2 = st.columns([2, 5])
-    with col_sp1:
-        level = st.radio("Seniority focus", ["All", "Associate", "Mid", "Senior+", "Staff/Principal"], horizontal=True, index=0)
-    with col_sp2:
-        st.write("")
+    # Seniority adjustment affects title set for LinkedIn title fields
     titles = apply_seniority(titles, level)
 
-    if mode_choice == "Pro":
-        st.subheader("✏️ Customize")
-        c1, c2 = st.columns([1, 1])
-        with c1:
-            newline = chr(10)
-            titles_default = newline.join(titles)
-            titles_text = st.text_area("Titles (one per line)", value=titles_default, height=150)
-        with c2:
-            comma_space = chr(44) + chr(32)
-            must_default = comma_space.join(must)
-            must_text = st.text_area("Must-have skills (comma-separated)", value=must_default, height=120)
-            nice_default = comma_space.join(nice)
-            nice_text = st.text_area("Nice-to-have skills (comma-separated)", value=nice_default, height=120)
+    # Editors (always visible)
+    st.subheader("✏️ Customize")
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        newline = chr(10)
+        titles_default = newline.join(titles)
+        titles_text = st.text_area("Titles (one per line)", value=titles_default, height=150)
+    with c2:
+        comma_space = chr(44) + chr(32)
+        must_default = comma_space.join(must)
+        must_text = st.text_area("Must-have skills (comma-separated)", value=must_default, height=120)
+        nice_default = comma_space.join(nice)
+        nice_text = st.text_area("Nice-to-have skills (comma-separated)", value=nice_default, height=120)
 
-        if st.button("Apply changes"):
-            st.session_state["titles"] = [t.strip() for t in titles_text.splitlines() if t.strip()]
-            st.session_state["must"] = [s.strip() for s in must_text.split(",") if s.strip()]
-            st.session_state["nice"] = [s.strip() for s in nice_text.split(",") if s.strip()]
-            titles = st.session_state["titles"]
-            must = st.session_state["must"]
-            nice = st.session_state["nice"]
+    if st.button("Apply changes"):
+        st.session_state["titles"] = [t.strip() for t in titles_text.splitlines() if t.strip()]
+        st.session_state["must"] = [s.strip() for s in must_text.split(",") if s.strip()]
+        st.session_state["nice"] = [s.strip() for s in nice_text.split(",") if s.strip()]
+        titles = st.session_state["titles"]
+        must = st.session_state["must"]
+        nice = st.session_state["nice"]
 
-        with st.expander("📄 Paste Job Description → Auto-extract", expanded=False):
-            jd = st.text_area("Paste JD (optional)", height=160)
-            if st.button("Extract from JD"):
-                m_ex, n_ex, n_not = jd_extract(jd)
-                applied = False
-                if m_ex:
-                    st.session_state["must"] = unique_preserve(m_ex)
-                    applied = True
-                if n_ex:
-                    st.session_state["nice"] = unique_preserve(n_ex)
-                    applied = True
-                if n_not:
-                    st.session_state["jd_not"] = unique_preserve(st.session_state.get("jd_not", []) + n_not)
-                    applied = True
-                if applied:
-                    must = st.session_state["must"]
-                    nice = st.session_state["nice"]
-                    st.success("JD extracted and applied.")
-                else:
-                    st.info("No strong matches found — you can still edit the lists above.")
+    # Qualifiers bias Keywords only
+    qual = []
+    if env == "Remote":
+        qual.append("remote")
+    elif env == "Hybrid":
+        qual.append("hybrid")
+    elif env == "On-site":
+        qual.append("on-site")
+    if size == "Startup":
+        qual.append("startup")
+    elif size == "Growth":
+        qual.append("scale-up")
+    elif size == "Enterprise":
+        qual.append("enterprise")
+    qual = qual + COMMON_QUALIFIERS[:2]
 
     # Build LinkedIn-ready strings
     li_title_current = or_group(titles)
     li_title_past = or_group(titles[: min(20, len(titles))])
     extra_not_list = [t.strip() for t in (extra_not or "").split(",") if t.strip()]
     all_not = unique_preserve(SMART_NOT + st.session_state.get("jd_not", []) + extra_not_list)
-    li_keywords = build_keywords(must, nice, all_not)
+    li_keywords = build_keywords(must, nice, all_not, qualifiers=qual)
     skills_all_csv = ", ".join(unique_preserve(must + nice))
 
-    # Health and confetti
+    # Health & confetti
     issues = string_health_report(li_keywords)
     if issues:
-        st.warning("\n".join(["• " + x for x in issues]))
+        st.warning("
+".join(["• " + x for x in issues]))
     else:
         st.success("✅ String looks healthy and ready to paste into LinkedIn.")
         st.balloons()
 
-    # Boolean Pack — pretty cards
+    # Boolean Pack — bright cards
     st.subheader("🎯 Boolean Pack (LinkedIn fields)")
     st.caption("Each block is copyable — paste into the matching LinkedIn field.")
     st.markdown("<div class='grid'>", unsafe_allow_html=True)
@@ -440,8 +441,17 @@ if st.session_state.get("built"):
     lines.append("")
     lines.append("SKILLS (CSV):")
     lines.append(skills_all_csv)
-    pack_text = "\n".join(lines)
+    pack_text = "
+".join(lines)
     st.download_button("Download pack (.txt)", data=pack_text, file_name="sourcing_pack.txt")
 
+    # Guidance panel
+    st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
+    st.subheader("💡 Pro tips for LinkedIn Recruiter")
+    st.markdown("- Put **Title (Current)** and **Title (Past)** into their matching fields.")
+    st.markdown("- Put **Keywords** into **People → Keywords** (leave companies empty for broader discovery).")
+    st.markdown("- Use **Location** filter separately for geo targeting; this app keeps strings portable.")
+    st.markdown("- Trim Keywords if OR count is very high to improve recall & speed.")
+
 else:
-    st.info("Type a job title and click **Build sourcing pack**. Then edit titles/skills or paste a JD to auto-extract.")
+    st.info("Type a job title (try 'Staff Machine Learning Engineer') and choose a theme. Then click **Build sourcing pack**.")
