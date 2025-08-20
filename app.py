@@ -326,6 +326,79 @@ def hero(job_title: str, category: str, location: str) -> None:
         st.markdown("<div class='chips'>" + ''.join(chips) + "</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
+    # Assistant Panels (tabs)
+    st.subheader("📚 Assistant Panels")
+    tabs = st.tabs(["🧠 Role Intel","🌐 Signals","🏢 Company Maps","🚦 Filters","💌 Outreach","✅ Checklist","⬇️ Export"])
+    with tabs[0]:
+        st.markdown("**What this shows:** quick context for the role, common responsibilities, and what *not* to target.")
+        if category == "ml":
+            st.markdown("- **Focus:** production ML (training → deployment), feature pipelines, model monitoring.
+- **Common stacks:** Python, PyTorch/TensorFlow, Airflow, MLflow/Feature Store, AWS/GCP.
+- **Avoid:** pure research-only profiles when you need prod ML; BI/marketing analysts.")
+        elif category == "sre":
+            st.markdown("- **Focus:** reliability, incident response, infra as code, observability.
+- **Common stacks:** Kubernetes, Terraform, Prometheus/Grafana, Go/Python, AWS/GCP.
+- **Avoid:** Help Desk/IT support, QA-only.")
+        else:
+            st.markdown("- **Focus:** building services and features, code quality, scalability.
+- **Common stacks:** Python/Java/Go, microservices, Docker/Kubernetes, AWS/GCP.
+- **Avoid:** QA-only, desktop support.")
+        st.markdown("**Title synonyms:**")
+        st.code("
+".join(titles), language="text")
+        st.markdown("**Top skills:**")
+        st.code(", ".join(unique_preserve(must + nice)) or "python, java, go", language="text")
+    with tabs[1]:
+        st.markdown("**What this shows:** quick levers to tighten or widen results based on signal strength.")
+        st.markdown("- Use **Title (Current)** first; if low volume, add **Title (Past)**.
+- Start with **Keywords** then add/remove 2–3 skills to control volume.
+- Add **NOT** terms like `intern, help desk, QA` to reduce noise.")
+        st.markdown("**Your current NOT terms:**")
+        st.code(", ".join(all_not) or "intern, internship, help desk", language="text")
+    with tabs[2]:
+        st.markdown("**What this shows:** companies that commonly employ this role. Paste into Company filters or use as a target list.")
+        st.code(companies_or or "(\"Google\" OR \"Meta\")", language="text")
+        st.markdown("**List view:**")
+        st.write(companies or ["Google","Meta","Amazon"])
+    with tabs[3]:
+        st.markdown("**What this shows:** suggested LinkedIn filters for this search.")
+        filt = []
+        if level == "Senior+":
+            filt.append("Seniority: Senior")
+        if level == "Staff/Principal":
+            filt.append("Seniority: Staff/Principal (or 8–12+ years)")
+        if env != "Any":
+            filt.append(f"Work setting: {env}")
+        if size != "Any":
+            filt.append(f"Company size: {size}")
+        if location:
+            filt.append(f"Location: {location}")
+        st.write(filt or ["Seniority: Any","Company size: Any"])
+        st.markdown("**Tip:** If volume is high, add `current company = any` and rely on Titles + Keywords.")
+    with tabs[4]:
+        st.markdown("**What this shows:** 2 short, friendly outreach drafts you can personalize and send fast.")
+        outreach_a = """Subject: {role} impact at {your_company}
+
+Hi {{name}},
+I’m hiring for a {role} to build {{impact area}}. Your background with {{relevant tech}} stood out. Interested in a quick chat?
+— {{recruiter}}""".format(role=st.session_state.get("role_title",""), your_company="our team")
+        outreach_b = """Subject: {role} — fast chat?
+
+Hi {{name}},
+We’re scaling {{team/product}}. Your experience across {skills} looks like a great fit. 15 mins to explore?
+— {{recruiter}}""".format(role=st.session_state.get("role_title",""), skills=", ".join(must[:5]) or "backend, infra")
+        st.code(outreach_a, language="text")
+        st.code(outreach_b, language="text")
+    with tabs[5]:
+        st.markdown("**What this shows:** a quick start checklist to de-risk your search.")
+        st.markdown("- Confirm role scope & must-haves with hiring manager.
+- Align on 3–5 anchor companies to target first.
+- Decide precision vs coverage strategy.
+- Save the search; schedule a daily review.")
+    with tabs[6]:
+        st.markdown("**What this shows:** the same export pack as below, for convenience.")
+        st.code(pack_text, language="text")
+
 
 def code_card(title: str, text: str, hint: str = '') -> None:
     st.markdown("<div class='card'>", unsafe_allow_html=True)
@@ -446,3 +519,5 @@ if st.session_state.get('built'):
                 base_not = unique_preserve(base_not + n_not); applied = True
             if applied:
                 st.success('JD terms applied.')
+            if not st.session_state.get('built'):
+    st.info("Type a job title (try 'Staff Machine Learning Engineer'), pick a bright theme, then click **Build sourcing pack**.")
