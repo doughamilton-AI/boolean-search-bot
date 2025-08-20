@@ -358,7 +358,6 @@ def _sanitize_for_linkedin(s: str) -> str:
     s = " ".join(s.split())  # collapse whitespace
     return s
 
-
 def _preview_variants_for_linkedin(titles: List[str], must: List[str], nice: List[str], li_keywords: str):
     """Return (keywords_only_no_not, titles_plus_keywords_lite, full_boolean)."""
     core_part = li_keywords.split(" NOT ")[0].strip() if " NOT " in li_keywords else li_keywords
