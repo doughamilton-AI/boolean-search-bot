@@ -1,4 +1,4 @@
-# AI Sourcing Assistant — Stable Pre‑Preview Build
+# AI Sourcing Assistant — Stable Minimal Build (Working Baseline)
 # Focus: LinkedIn‑ready Boolean outputs (Title Current/Past, Keywords, Skills)
 # Safe, minimal code (no custom HTML/JS) with JD auto‑extract and inline editors.
 
@@ -165,7 +165,7 @@ extra_not = st.text_input("Extra NOT terms (comma-separated, optional)", placeho
 
 build = st.button("✨ Build sourcing pack", type="primary")
 
-if build and job_title:
+if build and job_title and job_title.strip():
     st.session_state["built"] = True
     st.session_state["role_title"] = job_title
     st.session_state["location"] = location
@@ -185,11 +185,14 @@ if st.session_state.get("built"):
     st.subheader("✏️ Customize")
     c1, c2 = st.columns([1, 1])
     with c1:
-        titles_text = st.text_area("Titles (one per line)", value="
-".join(titles), height=150)
+        titles_default = "
+".join(titles)
+        titles_text = st.text_area("Titles (one per line)", value=titles_default, height=150)
     with c2:
-        must_text = st.text_area("Must-have skills (comma-separated)", value=", ".join(must), height=120)
-        nice_text = st.text_area("Nice-to-have skills (comma-separated)", value=", ".join(nice), height=120)
+        must_default = ", ".join(must)
+        must_text = st.text_area("Must-have skills (comma-separated)", value=must_default, height=120)
+        nice_default = ", ".join(nice)
+        nice_text = st.text_area("Nice-to-have skills (comma-separated)", value=nice_default, height=120)
 
     if st.button("Apply changes"):
         st.session_state["titles"] = [t.strip() for t in titles_text.splitlines() if t.strip()]
