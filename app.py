@@ -152,7 +152,7 @@ def string_health_report(s: str) -> List[str]:
     return issues
 
 
-# ============================ UI Theming ============================
+# ============================ Theming & Density ============================
 THEMES = {
     "Electric": {
         "grad": "linear-gradient(135deg, #6366F1 0%, #22D3EE 100%)",
@@ -188,49 +188,84 @@ THEMES = {
     },
 }
 
+DENSITY = {
+    "Comfortable": {"gap": "18px", "pad": "16px", "radius": "16px", "codefs": "13px"},
+    "Cozy":        {"gap": "12px", "pad": "12px", "radius": "14px", "codefs": "12px"},
+    "Compact":     {"gap": "8px",  "pad": "8px",  "radius": "12px", "codefs": "11px"},
+}
+
 
 def inject_css(theme_name: str, density: str) -> None:
     t = THEMES.get(theme_name, THEMES["Electric"])
-    gap = {"Comfortable": "18px", "Cozy": "12px", "Compact": "8px"}.get(density, "12px")
-    css = """
+    d = DENSITY.get(density, DENSITY["Cozy"])
+    css = f"""
     <style>
-    :root {
-      --grad: """ + t["grad"] + """;
-      --bg: """ + t["bg"] + """;
-      --card: """ + t["card"] + """;
-      --text: """ + t["text"] + """;
-      --muted: """ + t["muted"] + """;
-      --ring: """ + t["ring"] + """;
-      --gap: """ + gap + """;
-    }
-    .app-bg { background: var(--bg); color: var(--text); }
-    .hero {
-      padding: 16px 20px; border-radius: 16px; background: var(--card);
+    :root {{
+      --grad: {t["grad"]};
+      --bg: {t["bg"]};
+      --card: {t["card"]};
+      --text: {t["text"]};
+      --muted: {t["muted"]};
+      --ring: {t["ring"]};
+      --gap: {d["gap"]};
+      --pad: {d["pad"]};
+      --radius: {d["radius"]};
+      --codefs: {d["codefs"]};
+    }}
+    /* App-wide background and text */
+    .stApp, [data-testid="stAppViewContainer"] {{
+      background: var(--bg);
+      color: var(--text);
+    }}
+    [data-testid="stHeader"] {{
+      background: transparent;
+    }}
+    /* Inputs */
+    input[type="text"], textarea {{
+      background: var(--card) !important;
+      color: var(--text) !important;
+      border: 1px solid rgba(255,255,255,.07) !important;
+      border-radius: var(--radius) !important;
+    }}
+    /* Focus ring */
+    input[type="text"]:focus, textarea:focus {{
+      outline: none !important;
+      border-color: var(--ring) !important;
+      box-shadow: 0 0 0 3px rgba(99,102,241,.18) !important;
+    }}
+    /* Code blocks */
+    pre, code {{
+      font-size: var(--codefs) !important;
+    }}
+    /* Cards & Grid */
+    .grid {{ display: grid; gap: var(--gap); grid-template-columns: repeat(12, 1fr); }}
+    .card {{
+      grid-column: span 6;
+      background: var(--card);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: var(--radius);
+      padding: var(--pad);
+      box-shadow: 0 6px 20px rgba(0,0,0,.35);
+    }}
+    .hero {{
+      padding: var(--pad);
+      border-radius: var(--radius);
+      background: var(--card);
       border: 1px solid rgba(255,255,255,.06);
       box-shadow: 0 6px 20px rgba(0,0,0,.35);
-    }
-    .hero h1 {
+      margin-bottom: var(--gap);
+    }}
+    .hero h1 {{
       margin: 0; font-size: 28px; font-weight: 800;
       background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent;
-    }
-    .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
-    .chip {
+    }}
+    .chips {{ display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }}
+    .chip {{
       padding: 6px 10px; border-radius: 999px; font-size: 12px; color: var(--text);
       background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08);
-    }
-    .grid { display: grid; gap: var(--gap); grid-template-columns: repeat(12, 1fr); }
-    .card {
-      grid-column: span 6;
-      background: var(--card); border: 1px solid rgba(255,255,255,.06); border-radius: 16px;
-      padding: 12px 14px; box-shadow: 0 6px 20px rgba(0,0,0,.35);
-    }
-    .card h3 { margin: 0 0 6px 0; font-size: 14px; color: var(--muted); }
-    .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
-    .divider { height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent); margin: 8px 0; }
-    .pill {
-      display:inline-block;padding:4px 10px;border-radius:999px;
-      background: var(--grad); color:#0b0f19; font-weight:700; font-size:12px;
-    }
+    }}
+    .hint {{ font-size: 12px; color: var(--muted); margin-top: 4px; }}
+    .divider {{ height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent); margin: 8px 0; }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
@@ -253,24 +288,24 @@ def hero(job_title: str, category: str, location: str) -> None:
 
 def code_card(title: str, text: str, hint: str = "") -> None:
     st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.markdown(f"<h3>{title}</h3>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='margin:0 0 6px 0;font-size:14px;color:var(--muted);'>{title}</h3>", unsafe_allow_html=True)
     st.code(text or "", language="text")
     if hint:
         st.markdown(f"<div class='hint'>{hint}</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-# ============================ UI ============================
-# Controls row
+# ============================ Controls ============================
 c_theme, c_density = st.columns([1, 1])
 with c_theme:
-    theme_choice = st.selectbox("Theme", list(THEMES.keys()), index=0)
+    theme_choice = st.selectbox("Theme", list(THEMES.keys()), index=0, help="Change the color system & gradients")
 with c_density:
-    density_choice = st.selectbox("Density", ["Comfortable", "Cozy", "Compact"], index=1)
+    density_choice = st.selectbox("Density", ["Comfortable", "Cozy", "Compact"], index=1, help="Change spacing, radius & code size")
 
+# apply theme & density
 inject_css(theme_choice, density_choice)
 
-# Input row
+# Inputs
 cA, cB = st.columns([3, 2])
 with cA:
     job_title = st.text_input("Job title", placeholder="e.g., Site Reliability Engineer")
