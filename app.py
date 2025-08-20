@@ -441,8 +441,8 @@ if st.session_state.get("built"):
     lines.append("")
     lines.append("SKILLS (CSV):")
     lines.append(skills_all_csv)
-    pack_text = "
-".join(lines)
+    joiner = chr(10)
+    pack_text = joiner.join(lines)
     st.download_button("Download pack (.txt)", data=pack_text, file_name="sourcing_pack.txt")
 
     # Guidance panel
