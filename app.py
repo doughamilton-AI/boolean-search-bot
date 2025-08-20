@@ -107,7 +107,6 @@ SYNONYMS: Dict[str, str] = {
 }
 
 # ============================ Helpers ============================
-
 def unique_preserve(seq: List[str]) -> List[str]:
     seen, out = set(), []
     for x in seq:
@@ -120,7 +119,6 @@ def unique_preserve(seq: List[str]) -> List[str]:
             out.append(x2)
     return out
 
-
 def canonicalize(tokens: List[str]) -> List[str]:
     out, seen = [], set()
     for t in tokens:
@@ -130,7 +128,6 @@ def canonicalize(tokens: List[str]) -> List[str]:
             seen.add(k)
             out.append(c)
     return out
-
 
 def or_group(items: List[str]) -> str:
     items = [i.strip() for i in items if i and i.strip()]
@@ -144,7 +141,6 @@ def or_group(items: List[str]) -> str:
             quoted.append(i)
     return "(" + " OR ".join(quoted) + ")"
 
-
 def map_title_to_category(title: str) -> str:
     s = (title or "").lower()
     if any(t in s for t in ["sre", "site reliability", "reliab", "devops", "platform reliability"]):
@@ -152,7 +148,6 @@ def map_title_to_category(title: str) -> str:
     if any(t in s for t in ["machine learning", "ml engineer", "applied scientist", "data scientist", "ai engineer", " ml ", "ml-", "ml/"]):
         return "ml"
     return "swe"
-
 
 def expand_titles(base_titles: List[str], cat: str) -> List[str]:
     extra: List[str] = []
@@ -164,7 +159,6 @@ def expand_titles(base_titles: List[str], cat: str) -> List[str]:
         extra = ["Reliability Eng", "DevOps SRE", "Platform SRE", "Production Engineer"]
     return unique_preserve(base_titles + extra)
 
-
 def build_keywords(must: List[str], nice: List[str], nots: List[str], qualifiers: List[str] = None) -> str:
     base = unique_preserve(must + nice + (qualifiers or []))
     core = or_group(base)
@@ -174,7 +168,6 @@ def build_keywords(must: List[str], nice: List[str], nots: List[str], qualifiers
     if not nots2:
         return core
     return core + " NOT (" + " OR ".join(nots2) + ")"
-
 
 def jd_extract(jd_text: str) -> Tuple[List[str], List[str], List[str]]:
     jd = (jd_text or "").lower()
@@ -191,7 +184,6 @@ def jd_extract(jd_text: str) -> Tuple[List[str], List[str], List[str]]:
         if kw in jd:
             auto_not.append(kw)
     return must_ex, nice_ex, auto_not
-
 
 def string_health_report(s: str) -> List[str]:
     issues: List[str] = []
@@ -215,7 +207,6 @@ def string_health_report(s: str) -> List[str]:
         issues.append("Unbalanced parentheses; copy fresh strings or simplify.")
     return issues
 
-
 def string_health_grade(s: str) -> str:
     if not s:
         return "F"
@@ -230,7 +221,6 @@ def string_health_grade(s: str) -> str:
     if any("Unbalanced parentheses" in x for x in string_health_report(s)):
         score -= 25
     return "A" if score >= 90 else "B" if score >= 80 else "C" if score >= 70 else "D" if score >= 60 else "E" if score >= 50 else "F"
-
 
 def apply_seniority(titles: List[str], level: str) -> List[str]:
     base = []
@@ -340,7 +330,6 @@ def inject_css(theme_name: str) -> None:
     """
     st.markdown(css, unsafe_allow_html=True)
 
-
 def hero(job_title: str, category: str, location: str) -> None:
     st.markdown("<div class='hero'>", unsafe_allow_html=True)
     st.markdown("<h1>AI Sourcing Assistant</h1>", unsafe_allow_html=True)
@@ -354,7 +343,6 @@ def hero(job_title: str, category: str, location: str) -> None:
     if chips:
         st.markdown("<div class='chips'>" + "".join(chips) + "</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
-
 
 def code_card(title: str, text: str, hint: str = "") -> None:
     st.markdown("<div class='card'>", unsafe_allow_html=True)
@@ -375,9 +363,7 @@ def qp_get(name: str, default: str = "") -> str:
         return val[0] if val else default
     return val or default
 
-
 def qp_set(**kwargs):
-    # Set only keys we care about
     for k, v in kwargs.items():
         st.query_params[k] = v
 
@@ -420,7 +406,6 @@ if st.button("✨ Build sourcing pack") and (job_title or "").strip():
     st.session_state["location"] = location
     st.session_state["category"] = map_title_to_category(job_title)
 
-    # Default packs from ontology only (no external AI)
     R = ROLE_LIB[st.session_state["category"]]
     titles_seed = expand_titles(R["titles"], st.session_state["category"])
     must_seed = list(R["must"])
@@ -443,22 +428,21 @@ if st.session_state.get("built"):
 
     st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
 
-    # Auto-infer seniority from title text (light heuristic)
+    # Heuristic seniority
     title_lower = (st.session_state.get("role_title", "") or "").lower()
     if any(w in title_lower for w in ["staff", "principal"]):
         level = "Staff/Principal"
     elif any(w in title_lower for w in ["senior", "sr "]):
         level = "Senior+"
 
-    # Seniority adjustment affects title set for LinkedIn title fields
     titles = apply_seniority(titles, level)
 
-    # Editors (always visible)
+    # Editors
     st.subheader("✏️ Customize")
     c1, c2 = st.columns([1, 1])
     with c1:
-    titles_default = "\n".join(titles)
-    titles_text = st.text_area("Titles (one per line)", value=titles_default, height=180)
+        titles_default = "\n".join(titles)
+        titles_text = st.text_area("Titles (one per line)", value=titles_default, height=180)
     with c2:
         must_default = ", ".join(must)
         must_text = st.text_area("Must-have skills (comma-separated)", value=must_default, height=120)
@@ -489,7 +473,7 @@ if st.session_state.get("built"):
         nice = [s.strip() for s in nice_text.split(",") if s.strip()]
         st.session_state["titles"], st.session_state["must"], st.session_state["nice"] = titles, must, nice
 
-    # Company targets (segments + metro + custom add)
+    # Companies
     st.subheader("🏢 Company Targets — common employers for this role")
     group_order = ROLE_TO_GROUPS.get(category or "swe", ["faang_plus"])
     default_sel = group_order[:3] if len(group_order) >= 3 else group_order
@@ -503,7 +487,7 @@ if st.session_state.get("built"):
     companies.extend([c.strip() for c in (custom_companies or "").split(",") if c.strip()])
     companies = unique_preserve(companies)
 
-    # Qualifiers bias Keywords only
+    # Qualifiers (in Keywords)
     qual = []
     if env == "Remote":
         qual.append("remote")
@@ -517,7 +501,7 @@ if st.session_state.get("built"):
         qual.append("scale-up")
     elif size == "Enterprise":
         qual.append("enterprise")
-    qual = qual + ["highly scalable", "high throughput"]
+    qual += ["highly scalable", "high throughput"]
 
     # Build strings
     extra_not_list = [t.strip() for t in (extra_not or "").split(",") if t.strip()]
@@ -543,7 +527,7 @@ if st.session_state.get("built"):
         st.success("✅ String looks healthy (" + grade + ") and ready to paste into LinkedIn.")
         st.balloons()
 
-    # Blocks
+    # Boolean Pack
     st.subheader("🎯 Boolean Pack (LinkedIn fields)")
     st.caption("Each block is copyable — paste into the matching LinkedIn field.")
     st.markdown("<div class='grid'>", unsafe_allow_html=True)
@@ -553,7 +537,7 @@ if st.session_state.get("built"):
     code_card("Companies (OR) • People → Current/Past company", companies_or)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Build export text now so we can reuse in Export tab
+    # Build export text (used below and in Export tab)
     lines: List[str] = []
     lines.append("ROLE: " + st.session_state.get("role_title", ""))
     lines.append("LOCATION: " + (st.session_state.get("location") or ""))
@@ -574,7 +558,7 @@ if st.session_state.get("built"):
     lines.append(skills_all_csv)
     pack_text = "\n".join(lines)
 
-    # Assistant Panels (tabs)
+    # Assistant Panels
     st.subheader("📚 Assistant Panels")
     tabs = st.tabs(["🧠 Role Intel", "🌐 Signals", "🏢 Company Maps", "🚦 Filters", "💌 Outreach", "✅ Checklist", "⬇️ Export"])
 
@@ -681,7 +665,7 @@ We’re scaling {{team/product}}. Your experience across {', '.join(must[:5]) or
     st.subheader("⬇️ Export")
     st.download_button("Download pack (.txt)", data=pack_text, file_name="sourcing_pack.txt")
 
-    # Sticky Copy Bar (copy 4 key blocks)
+    # Sticky Copy Bar
     def js_escape(s: str) -> str:
         try:
             return json.dumps(s or "")
