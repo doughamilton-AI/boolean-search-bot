@@ -45,6 +45,53 @@ SMART_NOT = [
 ]
 
 
+# ============================ Company Sets (top-tech, editable) ============================
+COMPANY_SETS = {
+    "faang_plus": [
+        "Google", "Meta", "Apple", "Amazon", "Netflix", "Microsoft",
+        "NVIDIA", "Uber", "Airbnb", "Stripe", "Dropbox", "LinkedIn"
+    ],
+    "cloud_infra": [
+        "AWS", "Azure", "Google Cloud", "Cloudflare", "Snowflake", "Datadog",
+        "Fastly", "Akamai", "HashiCorp", "DigitalOcean", "Twilio", "MongoDB"
+    ],
+    "ai_first": [
+        "OpenAI", "Anthropic", "DeepMind", "Hugging Face", "Stability AI",
+        "Cohere", "Scale AI", "Character AI", "Perplexity AI", "xAI"
+    ],
+    "devtools_data": [
+        "Databricks", "Confluent", "Elastic", "Snyk", "GitHub", "GitLab",
+        "JetBrains", "CircleCI", "PagerDuty", "New Relic", "Grafana Labs", "Postman"
+    ],
+    "consumer_social": [
+        "YouTube", "Instagram", "WhatsApp", "Snap", "TikTok", "Pinterest",
+        "Reddit", "Spotify", "Discord"
+    ],
+    "marketplaces": [
+        "Uber", "Lyft", "DoorDash", "Instacart", "Airbnb", "Etsy",
+        "Amazon Marketplace", "Shopify"
+    ],
+    "enterprise_saas": [
+        "Salesforce", "ServiceNow", "Workday", "Atlassian", "Slack",
+        "Notion", "Asana", "Zoom", "Box", "Dropbox"
+    ],
+    "fintech": [
+        "Stripe", "Square", "Plaid", "Coinbase", "Robinhood", "Brex",
+        "Ramp", "Affirm", "Chime", "SoFi"
+    ],
+    "high_growth": [
+        "Rippling", "Figma", "Canva", "Retool", "Glean", "Snowflake",
+        "Databricks", "Cloudflare", "Notion", "Scale AI"
+    ],
+}
+
+ROLE_TO_GROUPS = {
+    "swe": ["faang_plus", "devtools_data", "enterprise_saas", "cloud_infra", "consumer_social", "fintech", "marketplaces", "high_growth"],
+    "ml":  ["ai_first", "faang_plus", "cloud_infra", "devtools_data", "enterprise_saas", "consumer_social", "high_growth"],
+    "sre": ["cloud_infra", "faang_plus", "devtools_data", "enterprise_saas", "marketplaces", "high_growth"],
+}
+
+
 # ============================ Helpers ============================
 def unique_preserve(seq: List[str]) -> List[str]:
     seen, out = set(), []
@@ -74,15 +121,10 @@ def or_group(items: List[str]) -> str:
 
 def map_title_to_category(title: str) -> str:
     s = (title or "").lower()
-    # SRE first
     sre_terms = ["sre", "site reliability", "reliab", "devops", "platform reliability"]
     if any(t in s for t in sre_terms):
         return "sre"
-    # ML next
-    ml_terms = [
-        "machine learning", "ml engineer", "applied scientist",
-        "data scientist", "ai engineer", " ml ", "ml-", "ml/"
-    ]
+    ml_terms = ["machine learning", "ml engineer", "applied scientist", "data scientist", "ai engineer", " ml ", "ml-", "ml/"]
     if any(t in s for t in ml_terms):
         return "ml"
     return "swe"
@@ -91,11 +133,9 @@ def map_title_to_category(title: str) -> str:
 def expand_titles(base_titles: List[str], cat: str) -> List[str]:
     extra: List[str] = []
     if cat == "swe":
-        extra = ["Software Eng", "Software Dev", "Full-Stack Engineer",
-                 "Backend Developer", "Frontend Developer"]
+        extra = ["Software Eng", "Software Dev", "Full-Stack Engineer", "Backend Developer", "Frontend Developer"]
     elif cat == "ml":
-        extra = ["ML Eng", "Machine Learning Specialist",
-                 "Applied ML Engineer", "ML Research Engineer"]
+        extra = ["ML Eng", "Machine Learning Specialist", "Applied ML Engineer", "ML Research Engineer"]
     elif cat == "sre":
         extra = ["Reliability Eng", "DevOps SRE", "Platform SRE", "Production Engineer"]
     return unique_preserve(base_titles + extra)
@@ -115,10 +155,6 @@ def build_keywords(must: List[str], nice: List[str], nots: List[str], qualifiers
 
 
 def jd_extract(jd_text: str) -> Tuple[List[str], List[str], List[str]]:
-    """
-    Minimal extractor: count occurrences of known skills from ROLE_LIB across all roles.
-    Returns (must_ex, nice_ex, auto_not).
-    """
     jd = (jd_text or "").lower()
     pool = set()
     for role in ROLE_LIB.values():
@@ -143,7 +179,6 @@ def string_health_report(s: str) -> List[str]:
         issues.append("Keywords look long (>900 chars); consider trimming.")
     if s.count(" OR ") > 80:
         issues.append("High OR count; remove niche/redundant terms.")
-    # Parentheses balance
     depth = 0
     ok = True
     for ch in s:
@@ -175,9 +210,8 @@ def apply_seniority(titles: List[str], level: str) -> List[str]:
         out = base
     elif level == "Senior+":
         out = ["Senior " + b for b in base] + base
-    else:  # Staff/Principal
+    else:
         out = ["Staff " + b for b in base] + ["Principal " + b for b in base] + ["Lead " + b for b in base] + base
-    # dedupe preserve order
     seen, res = set(), []
     for x in out:
         xl = x.lower()
@@ -188,9 +222,9 @@ def apply_seniority(titles: List[str], level: str) -> List[str]:
 
 # ============================ Bright Themes (no dark background) ============================
 THEMES = {
-    "Sky":    {"grad": "linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%)", "bg": "#F8FAFC", "card": "#FFFFFF", "text": "#0F172A", "muted": "#475569", "ring": "#3B82F6", "button": "#2563EB"},
-    "Coral":  {"grad": "linear-gradient(135deg, #FB7185 0%, #F59E0B 100%)", "bg": "#FFF7ED", "card": "#FFFFFF", "text": "#111827", "muted": "#6B7280", "ring": "#F97316", "button": "#F97316"},
-    "Mint":   {"grad": "linear-gradient(135deg, #34D399 0%, #22D3EE 100%)", "bg": "#ECFEFF", "card": "#FFFFFF", "text": "#0F172A", "muted": "#334155", "ring": "#10B981", "button": "#10B981"},
+    "Sky":   {"grad": "linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%)", "bg": "#F8FAFC", "card": "#FFFFFF", "text": "#0F172A", "muted": "#475569", "ring": "#3B82F6", "button": "#2563EB"},
+    "Coral": {"grad": "linear-gradient(135deg, #FB7185 0%, #F59E0B 100%)", "bg": "#FFF7ED", "card": "#FFFFFF", "text": "#111827", "muted": "#6B7280", "ring": "#F97316", "button": "#F97316"},
+    "Mint":  {"grad": "linear-gradient(135deg, #34D399 0%, #22D3EE 100%)", "bg": "#ECFEFF", "card": "#FFFFFF", "text": "#0F172A", "muted": "#334155", "ring": "#10B981", "button": "#10B981"},
 }
 
 
@@ -266,42 +300,12 @@ def code_card(title: str, text: str, hint: str = "") -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-# ============================ Predictive Suggestions ============================
-TITLE_SUGGESTIONS = {
-    "software": ["Software Engineer", "Full Stack Engineer", "Backend Engineer", "Frontend Engineer", "Platform Engineer"],
-    "machine": ["Machine Learning Engineer", "ML Engineer", "Applied Scientist", "AI Engineer", "Data Scientist"],
-    "reliab":  ["Site Reliability Engineer", "SRE", "Platform Reliability Engineer", "DevOps Engineer"],
-    "data":    ["Data Engineer", "Analytics Engineer", "Data Platform Engineer"],
-    "mobile":  ["iOS Engineer", "Android Engineer", "Mobile Engineer"],
-    "security":["Security Engineer", "Application Security Engineer", "Cloud Security Engineer"],
-}
-
-COMMON_QUALIFIERS = ["highly scalable", "high throughput", "low latency", "real-time", "cloud-native", "mission critical"]
-
-
-def suggest_titles(q: str) -> List[str]:
-    s = (q or "").lower()
-    hits: List[str] = []
-    for k, vals in TITLE_SUGGESTIONS.items():
-        if k in s:
-            for v in vals:
-                if v not in hits:
-                    hits.append(v)
-    if not hits:
-        # fallback by category
-        cat = map_title_to_category(q or "")
-        hits = ROLE_LIB.get(cat, {}).get("titles", [])[:6]
-    return hits[:8]
-
-
 # ============================ UI ============================
-# Theme selector (bright only)
 col_theme = st.columns([1])[0]
 with col_theme:
     theme_choice = st.selectbox("Theme", list(THEMES.keys()), index=0, help="Bright color systems")
 inject_css(theme_choice)
 
-# Prominent search input row
 st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
 cA, cB = st.columns([3, 2])
 with cA:
@@ -309,19 +313,8 @@ with cA:
 with cB:
     location = st.text_input("Location (optional)", placeholder="e.g., New York, Remote, Bay Area")
 
-# Predictive title suggestions under the search bar
-if job_title and len(job_title) >= 3:
-    sugg = suggest_titles(job_title)
-    if sugg:
-        st.caption("Suggested titles — click to add:")
-        btn_cols = st.columns(len(sugg)) if len(sugg) <= 6 else st.columns(6)
-        for i, title in enumerate(sugg[:6]):
-            if btn_cols[i].button(title, key="sugg_"+str(i)):
-                st.session_state["added_title"] = title
-
 extra_not = st.text_input("Extra NOT terms (comma-separated, optional)", placeholder="e.g., contractor, internship")
 
-# Quick filters that influence Keywords only
 cf1, cf2, cf3 = st.columns(3)
 with cf1:
     level = st.selectbox("Seniority", ["All", "Associate", "Mid", "Senior+", "Staff/Principal"], index=0)
@@ -330,7 +323,6 @@ with cf2:
 with cf3:
     size = st.selectbox("Company size focus", ["Any", "Startup", "Growth", "Enterprise"], index=0)
 
-# Build button
 build = st.button("✨ Build sourcing pack")
 
 if build and job_title and job_title.strip():
@@ -340,8 +332,6 @@ if build and job_title and job_title.strip():
     st.session_state["category"] = map_title_to_category(job_title)
     R = ROLE_LIB[st.session_state["category"]]
     titles_seed = expand_titles(R["titles"], st.session_state["category"])
-    if "added_title" in st.session_state:
-        titles_seed = unique_preserve([st.session_state["added_title"]] + titles_seed)
     st.session_state["titles"] = titles_seed
     st.session_state["must"] = list(R["must"])
     st.session_state["nice"] = list(R["nice"])
@@ -395,7 +385,7 @@ if st.session_state.get("built"):
         qual.append("scale-up")
     elif size == "Enterprise":
         qual.append("enterprise")
-    qual = qual + COMMON_QUALIFIERS[:2]
+    qual = qual + ["highly scalable", "high throughput"]
 
     # Build LinkedIn-ready strings
     li_title_current = or_group(titles)
@@ -414,6 +404,25 @@ if st.session_state.get("built"):
         st.success("✅ String looks healthy and ready to paste into LinkedIn.")
         st.balloons()
 
+    # ================== New: Company Targets ==================
+    st.subheader("🏢 Company Targets — Top tech where this role is common")
+    group_order = ROLE_TO_GROUPS.get(category or "swe", ["faang_plus"]) 
+    default_sel = group_order[:3] if len(group_order) >= 3 else group_order
+    selected_groups = st.multiselect("Segments", options=group_order, default=default_sel, help="Choose segments to populate the company list.")
+
+    companies = []
+    for g in selected_groups:
+        companies.extend(COMPANY_SETS.get(g, []))
+    companies = unique_preserve(companies)
+
+    companies_or = or_group(companies)
+    companies_csv = ", ".join(companies)
+
+    st.markdown("**Companies (OR)** — Paste into LinkedIn: People → Current company or Past company")
+    st.code(companies_or or '("Google" OR "Meta")', language="text")
+    st.markdown("**Companies (CSV)** — For sheets/notes")
+    st.code(companies_csv or 'Google, Meta', language="text")
+
     # Boolean Pack — bright cards
     st.subheader("🎯 Boolean Pack (LinkedIn fields)")
     st.caption("Each block is copyable — paste into the matching LinkedIn field.")
@@ -429,6 +438,9 @@ if st.session_state.get("built"):
     lines: List[str] = []
     lines.append("ROLE: " + st.session_state.get("role_title", ""))
     lines.append("LOCATION: " + (st.session_state.get("location") or ""))
+    lines.append("")
+    lines.append("COMPANIES (OR):")
+    lines.append(companies_or)
     lines.append("")
     lines.append("TITLE (CURRENT):")
     lines.append(li_title_current)
@@ -450,8 +462,9 @@ if st.session_state.get("built"):
     st.subheader("💡 Pro tips for LinkedIn Recruiter")
     st.markdown("- Put **Title (Current)** and **Title (Past)** into their matching fields.")
     st.markdown("- Put **Keywords** into **People → Keywords** (leave companies empty for broader discovery).")
+    st.markdown("- Use **Companies (OR)** in **Current/Past company** when you want alumni targeting.")
     st.markdown("- Use **Location** filter separately for geo targeting; this app keeps strings portable.")
     st.markdown("- Trim Keywords if OR count is very high to improve recall & speed.")
 
 else:
-    st.info("Type a job title (try 'Staff Machine Learning Engineer') and choose a theme. Then click **Build sourcing pack**.")
+    st.info("Type a job title (try 'Staff Machine Learning Engineer'), pick a bright theme, then click **Build sourcing pack**.")
