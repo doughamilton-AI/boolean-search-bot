@@ -348,169 +348,22 @@ def _init_from_query_params():
 def _sanitize_for_linkedin(s: str) -> str:
     """Make a boolean string safer for LinkedIn's URL search box."""
     s = s or ""
-    # Replace literal newlines first (these were causing unterminated string issues)
+    # Replace newlines and carriage returns with spaces
     s = s.replace("
 ", " ").replace("
 ", " ")
-    # Normalize curly punctuation to ASCII
-    s = (s.replace("—", "-")
-           .replace("–", "-")
-           .replace("“", '"')
-           .replace("”", '"')
-           .replace("’", "'"))
+    # Translate curly punctuation to ASCII using a safe translation table
+    trans = str.maketrans({
+        "—": "-",
+        "–": "-",
+        "“": '"',
+        "”": '"',
+        "’": "'",
+        "…": "...",
+    })
+    s = s.translate(trans)
     # Collapse whitespace
     s = " ".join(s.split())
-    return s
-
-def _preview_variants_for_linkedin(titles: List[str], must: List[str], nice: List[str], li_keywords: str):
-    """Return (keywords_only_no_not, titles_plus_keywords_lite, full_boolean)."""
-    core_part = li_keywords.split(" NOT ")[0].strip() if " NOT " in li_keywords else li_keywords
-    k_only = _sanitize_for_linkedin(core_part)
-    # small, safe title+keyword mix for preview volume sniff
-    t_lite = or_group(titles[:5])
-    m_lite = or_group((must + nice)[:6])
-    tk_lite = _sanitize_for_linkedin(f"{t_lite} AND {m_lite}") if t_lite and m_lite else k_only
-    k_full = _sanitize_for_linkedin(li_keywords)
-    return k_only, tk_lite, k_full
-
-
-
-def map_title_to_category(title: str) -> str:
-    t = (title or "").lower()
-    # Strong keyword checks
-    if any(k in t for k in ["sre", "site reliability", "production engineering", "production engineer", "reliability engineer"]):
-        return "sre"
-    if any(k in t for k in ["ml ", "machine learning", "applied scientist", "llm", "data scientist", "computer vision", "nlp"]):
-        return "ml"
-    if any(k in t for k in ["data engineer", "analytics engineer", "etl engineer", "data platform"]):
-        return "data_eng"
-    if any(k in t for k in ["data analyst", "bi analyst", "product analyst", "growth analyst", "business analyst"]):
-        return "data_analyst"
-    if any(k in t for k in ["frontend", "front end", "ui engineer", "react", "web engineer", "ui developer", "web developer"]):
-        return "frontend"
-    if any(k in t for k in ["backend", "back end", "distributed systems", "api engineer", "services engineer"]):
-        return "backend"
-    if any(k in t for k in ["ios", "swift", "iphone"]):
-        return "mobile_ios"
-    if any(k in t for k in ["android", "kotlin"]):
-        return "mobile_android"
-    if any(k in t for k in ["devops", "platform engineer", "infrastructure engineer", "cloud engineer", "build engineer", "release engineer"]):
-        return "devops"
-    if any(k in t for k in ["security engineer", "appsec", "product security", "cloud security", "security architect"]):
-        return "security"
-    if any(k in t for k in ["solutions architect", "sales engineer", "solutions engineer", "solutions consultant", "customer engineer"]):
-        return "solutions_arch"
-    if any(k in t for k in ["product manager", "gpm", "principal product manager", "product owner", "tpm", "program manager"]):
-        return "pm"
-    if any(k in t for k in ["designer", "ux", "ui", "interaction designer", "product designer"]):
-        return "design"
-    # Generic SWE fallback
-    if any(k in t for k in ["engineer", "developer", "software", "programmer", "coder", "full stack", "full-stack", "fullstack"]):
-        return "swe"
-    # Default to PM as a neutral non‑coding role
-    return "pm"
-
-
-def or_group(items: List[str]) -> str:
-    items = [i for i in items if i]
-    return "(" + " OR ".join([f'"{i}"' if " " in i else i for i in items]) + ")" if items else ""
-
-
-def title_abbrevs_for(cat: str) -> List[str]:
-    if cat in ["swe", "backend", "frontend", "devops", "sre"]:
-        return ["SWE", "Software Eng", "Software Dev", "SDE", "SDE I", "SDE II", "SDE2", "Sr Software Engineer", "Staff Software Engineer", "Principal Software Engineer", "Full-Stack Engineer", "Fullstack Engineer"]
-    if cat == "ml":
-        return ["ML Engineer", "Machine Learning Eng", "Applied Scientist", "AI Engineer", "Data Scientist", "NLP Engineer", "Computer Vision Engineer"]
-    if cat == "data_eng":
-        return ["Data Platform Engineer", "Analytics Engineer", "ETL Engineer", "Data Infrastructure Engineer"]
-    if cat == "security":
-        return ["AppSec Engineer", "Product Security Engineer", "Security Software Engineer", "Cloud Security Engineer"]
-    if cat == "design":
-        return ["UI/UX Designer", "UX/UI Designer", "Interaction Designer", "Product Designer"]
-    if cat == "pm":
-        return ["PM", "Sr Product Manager", "Principal PM", "Group PM", "Product Owner", "Technical Program Manager"]
-    if cat == "solutions_arch":
-        return ["Solutions Architect", "Solutions Engineer", "Sales Engineer", "Customer Engineer", "Solutions Consultant"]
-    return []
-
-
-def expand_titles(base_titles: List[str], cat: str) -> List[str]:
-    """Add common abbreviations without changing seniority mix."""
-    ext = list(dict.fromkeys(base_titles + title_abbrevs_for(cat)))
-    # de‑dupe, keep order
-    seen = set()
-    out = []
-    for x in ext:
-        if x.lower() not in seen:
-            out.append(x)
-            seen.add(x.lower())
-    return out
-
-
-def build_booleans(titles, must, nice, location: str = "", add_not=True, extra_nots: List[str] = None):
-    li_title = or_group(titles)
-    li_kw_core = or_group(must + nice)
-    nots = SMART_EXCLUDE_BASE + (extra_nots or []) if add_not else []
-    li_keywords = f"{li_kw_core} NOT (" + " OR ".join(nots) + ")" if nots else li_kw_core
-
-    # Variants kept out of Boolean Pack per UX request
-    broad_kw = or_group(must[:4] + nice[:2])
-    focused_kw = or_group(must[:6])
-    broad = f"{or_group(titles[:4])} AND {broad_kw}"
-    focused = f"{or_group(titles)} AND {focused_kw}"
-
-    return li_title, li_keywords, broad, focused
-
-
-def build_expanded_keywords(must: List[str], nice: List[str], stacks: List[str], clouds: List[str], dbs: List[str]) -> str:
-    pool = list(dict.fromkeys(must + nice + stacks + clouds + dbs))
-    return or_group(pool[:18])
-
-
-def confidence_score(titles: List[str], must: List[str], nice: List[str]) -> int:
-    score = 40 if titles else 20
-    score += min(30, len(must) * 5)
-    score += min(15, len(nice) * 2)
-    if len(titles) > 12 or len(must) + len(nice) > 20:
-        score -= 5
-    return max(10, min(100, score))
-
-# -------- Wider‑net fuzzy mapping (no regex in strings to keep deployment simple) --------
-from difflib import SequenceMatcher
-
-EXTRA_ALIASES = {
-    "swe": ["Software Programmer", "Programmer", "Software Dev", "Full Stack Developer", "Backend Developer", "Frontend Developer", "Platform Software Engineer"],
-    "frontend": ["Front-End Engineer", "UI Developer", "Web Developer", "React Developer", "Angular Developer"],
-    "backend": ["Back-End Engineer", "API Developer", "Services Engineer", "Platform Backend Engineer"],
-    "mobile_ios": ["iOS Software Engineer", "iOS Developer", "iPhone Developer"],
-    "mobile_android": ["Android Software Engineer", "Android Developer"],
-    "ml": ["ML Scientist", "Machine Learning Scientist", "AI Scientist", "NLP Scientist", "CV Engineer"],
-    "data_eng": ["ETL Developer", "Data Pipeline Engineer", "Big Data Engineer", "Data Infrastructure"],
-    "data_analyst": ["Growth Analyst", "Product Data Analyst", "BI Developer"],
-    "pm": ["Product Owner", "TPM", "Technical Program Manager", "Program Manager"],
-    "design": ["UX/UI Designer", "Product Design", "Interaction Designer"],
-    "sre": ["Production Engineer", "Reliability Engineer", "DevOps SRE", "Systems Reliability Engineer"],
-    "devops": ["Cloud Engineer", "Infrastructure Engineer", "Build Engineer", "Release Engineer", "Platform Engineer (DevOps)"],
-    "security": ["Application Security Engineer", "Product Security Engineer", "Cloud Security Engineer"],
-    "solutions_arch": ["Solutions Consultant", "Sales Engineer", "Customer Engineer", "Field Engineer"],
-}
-
-
-def _normalize_title(s: str) -> str:
-    s = (s or "").lower()
-    # strip common seniority tokens
-    for w in [" sr ", " senior ", " staff ", " principal ", " lead ", " junior ", " ii ", " iii ", " iv ", " i "]:
-        s = s.replace(w, " ")
-    # keep only letters and spaces
-    cleaned = []
-    for ch in s:
-        if ch.isalpha() or ch.isspace():
-            cleaned.append(ch)
-        else:
-            cleaned.append(" ")
-    s = "".join(cleaned)
-    while "  " in s:
-        s = s.replace("  ", " ")
     return s.strip()
 
 
