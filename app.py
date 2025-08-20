@@ -446,5 +446,3 @@ if st.session_state.get('built'):
                 base_not = unique_preserve(base_not + n_not); applied = True
             if applied:
                 st.success('JD terms applied.')
-            if not st.session_state.get('built'):
-    st.info("Type a job title (try 'Staff Machine Learning Engineer'), pick a bright theme, then click **Build sourcing pack**.")
