@@ -1,8 +1,11 @@
-# app.py — AI Sourcing Assistant (Bright UI, No External AI)
+# app.py — AI Sourcing Assistant (Bright UI, No External AI) + Outcome Tracking
 # Requirements (requirements.txt):
 # streamlit>=1.33
 
 import json
+import os
+import hashlib
+from datetime import datetime
 from typing import List, Tuple, Dict
 import streamlit as st
 
@@ -106,7 +109,47 @@ SYNONYMS: Dict[str, str] = {
     "py": "python",
 }
 
+# ============================ Feedback persistence ============================
+FEEDBACK_FILE = "feedback.json"
+
+def _can_write() -> bool:
+    try:
+        test_path = ".write_test"
+        with open(test_path, "w", encoding="utf-8") as f:
+            f.write("ok")
+        os.remove(test_path)
+        return True
+    except Exception:
+        return False
+
+CAN_WRITE_FS = _can_write()
+
+def load_feedback() -> List[dict]:
+    if "feedback_cache" in st.session_state:
+        return st.session_state["feedback_cache"]
+    recs: List[dict] = []
+    if CAN_WRITE_FS and os.path.exists(FEEDBACK_FILE):
+        try:
+            with open(FEEDBACK_FILE, "r", encoding="utf-8") as f:
+                recs = json.load(f)
+        except Exception:
+            recs = []
+    st.session_state["feedback_cache"] = recs
+    return recs
+
+def save_feedback(recs: List[dict]) -> bool:
+    st.session_state["feedback_cache"] = recs
+    if not CAN_WRITE_FS:
+        return False
+    try:
+        with open(FEEDBACK_FILE, "w", encoding="utf-8") as f:
+            json.dump(recs, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception:
+        return False
+
 # ============================ Helpers ============================
+
 def unique_preserve(seq: List[str]) -> List[str]:
     seen, out = set(), []
     for x in seq:
@@ -119,6 +162,7 @@ def unique_preserve(seq: List[str]) -> List[str]:
             out.append(x2)
     return out
 
+
 def canonicalize(tokens: List[str]) -> List[str]:
     out, seen = [], set()
     for t in tokens:
@@ -128,6 +172,7 @@ def canonicalize(tokens: List[str]) -> List[str]:
             seen.add(k)
             out.append(c)
     return out
+
 
 def or_group(items: List[str]) -> str:
     items = [i.strip() for i in items if i and i.strip()]
@@ -141,6 +186,7 @@ def or_group(items: List[str]) -> str:
             quoted.append(i)
     return "(" + " OR ".join(quoted) + ")"
 
+
 def map_title_to_category(title: str) -> str:
     s = (title or "").lower()
     if any(t in s for t in ["sre", "site reliability", "reliab", "devops", "platform reliability"]):
@@ -148,6 +194,7 @@ def map_title_to_category(title: str) -> str:
     if any(t in s for t in ["machine learning", "ml engineer", "applied scientist", "data scientist", "ai engineer", " ml ", "ml-", "ml/"]):
         return "ml"
     return "swe"
+
 
 def expand_titles(base_titles: List[str], cat: str) -> List[str]:
     extra: List[str] = []
@@ -159,6 +206,7 @@ def expand_titles(base_titles: List[str], cat: str) -> List[str]:
         extra = ["Reliability Eng", "DevOps SRE", "Platform SRE", "Production Engineer"]
     return unique_preserve(base_titles + extra)
 
+
 def build_keywords(must: List[str], nice: List[str], nots: List[str], qualifiers: List[str] = None) -> str:
     base = unique_preserve(must + nice + (qualifiers or []))
     core = or_group(base)
@@ -168,6 +216,7 @@ def build_keywords(must: List[str], nice: List[str], nots: List[str], qualifiers
     if not nots2:
         return core
     return core + " NOT (" + " OR ".join(nots2) + ")"
+
 
 def jd_extract(jd_text: str) -> Tuple[List[str], List[str], List[str]]:
     jd = (jd_text or "").lower()
@@ -184,6 +233,7 @@ def jd_extract(jd_text: str) -> Tuple[List[str], List[str], List[str]]:
         if kw in jd:
             auto_not.append(kw)
     return must_ex, nice_ex, auto_not
+
 
 def string_health_report(s: str) -> List[str]:
     issues: List[str] = []
@@ -207,6 +257,7 @@ def string_health_report(s: str) -> List[str]:
         issues.append("Unbalanced parentheses; copy fresh strings or simplify.")
     return issues
 
+
 def string_health_grade(s: str) -> str:
     if not s:
         return "F"
@@ -221,6 +272,7 @@ def string_health_grade(s: str) -> str:
     if any("Unbalanced parentheses" in x for x in string_health_report(s)):
         score -= 25
     return "A" if score >= 90 else "B" if score >= 80 else "C" if score >= 70 else "D" if score >= 60 else "E" if score >= 50 else "F"
+
 
 def apply_seniority(titles: List[str], level: str) -> List[str]:
     base = []
@@ -330,6 +382,7 @@ def inject_css(theme_name: str) -> None:
     """
     st.markdown(css, unsafe_allow_html=True)
 
+
 def hero(job_title: str, category: str, location: str) -> None:
     st.markdown("<div class='hero'>", unsafe_allow_html=True)
     st.markdown("<h1>AI Sourcing Assistant</h1>", unsafe_allow_html=True)
@@ -343,6 +396,7 @@ def hero(job_title: str, category: str, location: str) -> None:
     if chips:
         st.markdown("<div class='chips'>" + "".join(chips) + "</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
+
 
 def code_card(title: str, text: str, hint: str = "") -> None:
     st.markdown("<div class='card'>", unsafe_allow_html=True)
@@ -362,6 +416,7 @@ def qp_get(name: str, default: str = "") -> str:
     if isinstance(val, list):
         return val[0] if val else default
     return val or default
+
 
 def qp_set(**kwargs):
     for k, v in kwargs.items():
@@ -441,7 +496,8 @@ if st.session_state.get("built"):
     st.subheader("✏️ Customize")
     c1, c2 = st.columns([1, 1])
     with c1:
-        titles_default = "\n".join(titles)
+        titles_default = "
+".join(titles)
         titles_text = st.text_area("Titles (one per line)", value=titles_default, height=180)
     with c2:
         must_default = ", ".join(must)
@@ -487,7 +543,7 @@ if st.session_state.get("built"):
     companies.extend([c.strip() for c in (custom_companies or "").split(",") if c.strip()])
     companies = unique_preserve(companies)
 
-    # Qualifiers (in Keywords)
+    # Qualifiers in Keywords
     qual = []
     if env == "Remote":
         qual.append("remote")
@@ -516,7 +572,9 @@ if st.session_state.get("built"):
     issues = string_health_report(li_keywords)
     grade = string_health_grade(li_keywords)
     if issues:
-        st.warning("Health: " + grade + "\n" + "\n".join(["• " + x for x in issues]))
+        st.warning("Health: " + grade + "
+" + "
+".join(["• " + x for x in issues]))
         if st.button("🧹 Trim & Dedupe (suggested)"):
             must_k = canonicalize(must)[:12]
             nice_k = canonicalize(nice)[:8]
@@ -556,7 +614,130 @@ if st.session_state.get("built"):
     lines.append("")
     lines.append("SKILLS (CSV):")
     lines.append(skills_all_csv)
-    pack_text = "\n".join(lines)
+    pack_text = "
+".join(lines)
+
+    # =============== Outcome Tracking ===============
+    st.subheader("📊 Outcome tracking")
+
+    def pack_signature() -> str:
+        base = "||".join([
+            st.session_state.get("role_title", ""),
+            li_title_current or "",
+            li_title_past or "",
+            li_keywords or "",
+            companies_or or "",
+            category or "",
+            level or "",
+            env or "",
+            size or "",
+            metro or "",
+        ])
+        return hashlib.sha1(base.encode("utf-8")).hexdigest()[:12]
+
+    sig = pack_signature()
+    with st.form("feedback_form"):
+        c_f1, c_f2, c_f3 = st.columns([1,1,2])
+        with c_f1:
+            rating = st.radio("Quality", ["👍 Good", "👎 Needs work"], horizontal=True, index=0)
+        with c_f2:
+            results_found = st.number_input("Good profiles found", min_value=0, step=1, value=0)
+        with c_f3:
+            time_spent = st.selectbox("Time spent", ["<5m", "5–15m", "15–30m", "30m+"], index=1)
+        notes = st.text_area("Notes (optional)", placeholder="What worked? What was noisy?")
+        submitted = st.form_submit_button("Save feedback")
+
+    if submitted:
+        rec = {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "sig": sig,
+            "role_title": st.session_state.get("role_title", ""),
+            "category": category,
+            "level": level,
+            "env": env,
+            "size": size,
+            "metro": metro,
+            "location": st.session_state.get("location", ""),
+            "rating": rating,
+            "results": int(results_found),
+            "time": time_spent,
+            "notes": notes,
+            # snapshot of strings
+            "title_current": li_title_current,
+            "title_past": li_title_past,
+            "keywords": li_keywords,
+            "companies": companies_or,
+        }
+        recs = load_feedback()
+        recs.append(rec)
+        ok = save_feedback(recs)
+        if ok:
+            st.success("Feedback saved. Thanks!")
+        else:
+            st.info("Saved for this session. Download your feedback JSON below to keep a copy.")
+
+    # Leaderboard (best performing)
+    recs = load_feedback()
+    # Aggregate
+    agg: Dict[str, dict] = {}
+    for r in recs:
+        sg = r.get("sig")
+        if not sg:
+            continue
+        a = agg.setdefault(sg, {
+            "count": 0, "pos": 0, "neg": 0, "results": 0, "last": "",
+            "role_title": r.get("role_title", ""), "category": r.get("category", ""),
+            "title_current": r.get("title_current", ""),
+            "title_past": r.get("title_past", ""),
+            "keywords": r.get("keywords", ""),
+            "companies": r.get("companies", ""),
+        })
+        a["count"] += 1
+        a["results"] += int(r.get("results", 0))
+        if str(r.get("rating", "")).startswith("👍"):
+            a["pos"] += 1
+        else:
+            a["neg"] += 1
+        ts = r.get("timestamp", "")
+        if ts and ts > a.get("last", ""):
+            a["last"] = ts
+    # Compute score: avg results + thumbs factor
+    rows = []
+    for sg, a in agg.items():
+        avg_results = a["results"] / max(1, a["count"])
+        pos_rate = a["pos"] / max(1, a["count"])
+        score = avg_results + 0.75 * pos_rate
+        rows.append({"sig": sg, "score": score, "avg_results": avg_results, "pos_rate": pos_rate, "count": a["count"], "last": a["last"], **a})
+    rows.sort(key=lambda x: (x["score"], x["avg_results"]), reverse=True)
+
+    st.markdown("**★ Recently best‑performing packs**")
+    if rows:
+        top = rows[:5]
+        for i, r in enumerate(top, start=1):
+            st.markdown(f"**{i}.** ⭐️ **{r.get('role_title','')}** · {r.get('category','').upper()} · Avg good profiles: {r['avg_results']:.1f} · 👍 {(r['pos_rate']*100):.0f}% · n={r['count']}")
+            cc1, cc2, cc3, cc4, cc5 = st.columns([1.2,1.2,1.2,1.2,1.2])
+            with cc1:
+                st.button("Copy Title(Current)", key=f"copy_tc_{r['sig']}", on_click=lambda s=r: st.session_state.update({"_copy": r.get("title_current","")}))
+            with cc2:
+                st.button("Copy Title(Past)", key=f"copy_tp_{r['sig']}", on_click=lambda s=r: st.session_state.update({"_copy": r.get("title_past","")}))
+            with cc3:
+                st.button("Copy Keywords", key=f"copy_kw_{r['sig']}", on_click=lambda s=r: st.session_state.update({"_copy": r.get("keywords","")}))
+            with cc4:
+                st.button("Copy Companies", key=f"copy_co_{r['sig']}", on_click=lambda s=r: st.session_state.update({"_copy": r.get("companies","")}))
+            with cc5:
+                if st.button("Load to editors", key=f"load_{r['sig']}"):
+                    # Load strings into current session so user can tweak
+                    st.session_state["titles"] = [t.strip().strip('"') for t in (r.get("title_current",""))[1:-1].split(" OR ") if t.strip()]
+                    st.session_state["must"] = [s.strip() for s in skills_all_csv.split(",") if s.strip()]
+                    st.session_state["nice"] = []  # keep simple; user can add
+                    st.info("Loaded. Scroll up to Customize to review and click Apply changes.")
+            st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
+    else:
+        st.caption("No feedback yet — save a few outcomes to see best packs here.")
+
+    # Feedback export
+    if recs:
+        st.download_button("⬇️ Download feedback JSON", data=json.dumps(recs, ensure_ascii=False, indent=2), file_name="feedback.json")
 
     # Assistant Panels
     st.subheader("📚 Assistant Panels")
@@ -589,7 +770,8 @@ if st.session_state.get("built"):
                 """
             )
         st.markdown("**Title synonyms:**")
-        st.code("\n".join(titles), language="text")
+        st.code("
+".join(titles), language="text")
         st.markdown("**Top skills:**")
         st.code(", ".join(unique_preserve(must + nice)) or "python, java, go", language="text")
 
