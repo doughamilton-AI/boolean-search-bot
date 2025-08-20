@@ -139,8 +139,7 @@ if st.session_state.get("built"):
     st.subheader("✏️ Customize")
     c1, c2 = st.columns([1,1])
     with c1:
-        titles_text = st.text_area("Titles (one per line)", value="
-".join(titles), height=150)
+        titles_text = st.text_area("Titles (one per line)", value="\n".join(titles), height=150)
     with c2:
         must_text = st.text_area("Must-have skills (comma-separated)", value=", ".join(must), height=120)
         nice_text = st.text_area("Nice-to-have skills (comma-separated)", value=", ".join(nice), height=120)
