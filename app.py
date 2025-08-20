@@ -207,23 +207,45 @@ if test_ai:
     if client is None:
         st.error('No OpenAI key detected. Add OPENAI_API_KEY in Streamlit Secrets or environment.')
     else:
-        # Minimal JSON echo to verify permissions/model access
+        # Show SDK version + model, and surface the actual exception to help debugging
         try:
-            ping_schema = {'type':'object','properties':{'ok':{'type':'boolean'}},'required':['ok'],'additionalProperties':False}
+            import importlib.metadata as md
+            ver = md.version('openai')
+        except Exception:
+            ver = 'unknown'
+        st.caption(f"OpenAI SDK version: {ver} • Model: {model_choice}")
+        try:
+            ping_schema = {
+                'type': 'object',
+                'properties': {'ok': {'type': 'boolean'}},
+                'required': ['ok'],
+                'additionalProperties': False
+            }
             resp = client.chat.completions.create(
                 model=model_choice,
                 temperature=0,
-                messages=[{'role':'system','content':'Return JSON only that matches the schema.'}, {'role':'user','content':'{"ok": true}'}],
-                response_format={'type':'json_schema','json_schema':{'name':'Ping','schema':ping_schema,'strict':True}}
+                messages=[
+                    {'role': 'system', 'content': 'Return JSON only that matches the schema.'},
+                    {'role': 'user', 'content': '{"ok": true}'}
+                ],
+                response_format={'type': 'json_schema', 'json_schema': {'name': 'Ping', 'schema': ping_schema, 'strict': True}}
             )
             _ = json.loads(resp.choices[0].message.content or '{}')
-            st.success('AI connection looks good. Model responded.')
+            st.success('✅ AI connection looks good. Model responded.')
         except Exception as e:
-            st.error('AI test failed. Check model access or key. ')
+            st.error(f"❌ AI test failed: {type(e).__name__}: {e}")
 
 if build and (title_in or '').strip():
     fam = map_family(title_in)
     out = call_openai_pack(client, model_choice, title_in, jd_in, loc_in, mode)
+
+    # Auto-fallback to another model if the chosen one fails
+    if not out and client is not None:
+        alt_model = 'gpt-4o' if model_choice != 'gpt-4o' else 'gpt-4o-mini'
+        try_alt = call_openai_pack(client, alt_model, title_in, jd_in, loc_in, mode)
+        if try_alt:
+            st.info(f"Primary model '{model_choice}' failed; used '{alt_model}' instead.")
+            out = try_alt
 
     if not out:
         seed = SEEDS[fam]
