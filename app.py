@@ -239,16 +239,30 @@ def call_gemini_pack(model, job_title: str, job_desc: str, location: str, mode: 
     if model is None:
         return {}
 
+    # Gemini JSON schema must exclude unsupported fields like 'additionalProperties'.
     schema: Dict = {
         'type': 'object',
         'properties': {
-            'titles': {'type': 'object','properties': {'must': {'type':'array','items': {'type':'string'}}, 'variants': {'type':'array','items': {'type':'string'}}}, 'required': ['must','variants'], 'additionalProperties': False},
-            'skills': {'type': 'object','properties': {'must': {'type':'array','items': {'type':'string'}}, 'nice': {'type':'array','items': {'type':'string'}}}, 'required': ['must','nice'], 'additionalProperties': False},
-            'not_terms': {'type': 'array','items': {'type':'string'}},
-            'companies': {'type': 'array','items': {'type':'string'}},
+            'titles': {
+                'type': 'object',
+                'properties': {
+                    'must': {'type': 'array', 'items': {'type': 'string'}},
+                    'variants': {'type': 'array', 'items': {'type': 'string'}}
+                },
+                'required': ['must', 'variants']
+            },
+            'skills': {
+                'type': 'object',
+                'properties': {
+                    'must': {'type': 'array', 'items': {'type': 'string'}},
+                    'nice': {'type': 'array', 'items': {'type': 'string'}}
+                },
+                'required': ['must', 'nice']
+            },
+            'not_terms': {'type': 'array', 'items': {'type': 'string'}},
+            'companies': {'type': 'array', 'items': {'type': 'string'}}
         },
-        'required': ['titles','skills','not_terms','companies'],
-        'additionalProperties': False
+        'required': ['titles', 'skills', 'not_terms', 'companies']
     }
 
     joiner = chr(10)
@@ -343,7 +357,7 @@ if test_ai:
             st.error('OpenAI client could not be created. Ensure openai>=1.85.0 and any org/project settings are correct.')
         else:
             try:
-                ping_schema = {'type':'object','properties':{'ok':{'type':'boolean'}},'required':['ok'],'additionalProperties':False}
+                ping_schema = {'type':'object','properties':{'ok':{'type':'boolean'}},'required':['ok']}
                 resp = client_openai.chat.completions.create(
                     model=model_choice,
                     temperature=0,
@@ -361,7 +375,7 @@ if test_ai:
             st.error('No Gemini key or SDK not installed. Add GEMINI_API_KEY in Secrets and google-generativeai to requirements.')
         else:
             try:
-                ping_schema = {'type':'object','properties':{'ok':{'type':'boolean'}},'required':['ok'],'additionalProperties':False}
+                ping_schema = {'type':'object','properties':{'ok':{'type':'boolean'}},'required':['ok']}
                 generation_config = {'response_mime_type':'application/json','response_schema': ping_schema}
                 resp = client_gemini.generate_content(['Return JSON that matches the schema.', '{"ok": true}'], generation_config=generation_config)
                 _ = json.loads(resp.text or '{}')
@@ -455,4 +469,3 @@ if build and (title_in or '').strip():
     st.download_button('Download pack (.txt)', data=pack_text, file_name='sourcing_pack.txt')
 else:
     st.info('Enter a role title, optionally paste a JD, pick a provider/model, then click Build with AI.')
-
