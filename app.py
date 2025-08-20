@@ -347,15 +347,19 @@ def _init_from_query_params():
 
 def _sanitize_for_linkedin(s: str) -> str:
     """Make a boolean string safer for LinkedIn's URL search box."""
-    s = (s or "").replace("
+    s = s or ""
+    # Replace literal newlines first (these were causing unterminated string issues)
+    s = s.replace("
 ", " ").replace("
 ", " ")
+    # Normalize curly punctuation to ASCII
     s = (s.replace("—", "-")
            .replace("–", "-")
            .replace("“", '"')
            .replace("”", '"')
            .replace("’", "'"))
-    s = " ".join(s.split())  # collapse whitespace
+    # Collapse whitespace
+    s = " ".join(s.split())
     return s
 
 def _preview_variants_for_linkedin(titles: List[str], must: List[str], nice: List[str], li_keywords: str):
