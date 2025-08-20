@@ -352,15 +352,15 @@ def _sanitize_for_linkedin(s: str) -> str:
     s = s.replace("
 ", " ").replace("
 ", " ")
-    # Normalize curly punctuation to ASCII using Unicode code points
+    # Normalize curly punctuation to ASCII using Unicode code points (avoids broken string literals)
     trans = {
-        ord('—'): '-',  # em dash —
-        ord('–'): '-',  # en dash –
-        ord('“'): '"', # left double quote “
-        ord('”'): '"', # right double quote ”
-        ord('‘'): "'", # left single quote ‘
-        ord('’'): "'", # right single quote ’
-        ord('…'): '...',# ellipsis …
+        0x2014: "-",   # — em dash
+        0x2013: "-",   # – en dash
+        0x201C: '"',   # “ left dbl quote
+        0x201D: '"',   # ” right dbl quote
+        0x2018: "'",   # ‘ left single quote
+        0x2019: "'",   # ’ right single quote
+        0x2026: "...", # … ellipsis
     }
     s = s.translate(trans)
     # Collapse whitespace
