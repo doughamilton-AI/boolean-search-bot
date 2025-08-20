@@ -152,6 +152,33 @@ def string_health_report(s: str) -> List[str]:
     return issues
 
 
+def apply_seniority(titles: List[str], level: str) -> List[str]:
+    base = []
+    for t in titles:
+        b = t
+        for tok in ["Senior ", "Staff ", "Principal ", "Lead ", "Sr "]:
+            b = b.replace(tok, "")
+        base.append(b.strip())
+    out: List[str] = []
+    if level == "All":
+        out = titles + base
+    elif level == "Associate":
+        out = ["Junior " + b for b in base] + base
+    elif level == "Mid":
+        out = base
+    elif level == "Senior+":
+        out = ["Senior " + b for b in base] + base
+    else:  # Staff/Principal
+        out = ["Staff " + b for b in base] + ["Principal " + b for b in base] + ["Lead " + b for b in base] + base
+    # dedupe preserve order
+    seen, res = set(), []
+    for x in out:
+        xl = x.lower()
+        if xl not in seen:
+            seen.add(xl); res.append(x)
+    return res[:24]
+
+
 # ============================ Theming & Density ============================
 THEMES = {
     "Electric": {
@@ -160,7 +187,8 @@ THEMES = {
         "card": "#111827",
         "text": "#E5E7EB",
         "muted": "#9CA3AF",
-        "ring": "#8B5CF6"
+        "ring": "#8B5CF6",
+        "button": "#4F46E5"
     },
     "Sunset": {
         "grad": "linear-gradient(135deg, #F97316 0%, #F43F5E 100%)",
@@ -168,7 +196,8 @@ THEMES = {
         "card": "#1F2937",
         "text": "#F3F4F6",
         "muted": "#D1D5DB",
-        "ring": "#FB923C"
+        "ring": "#FB923C",
+        "button": "#F97316"
     },
     "Aqua": {
         "grad": "linear-gradient(135deg, #06B6D4 0%, #34D399 100%)",
@@ -176,7 +205,8 @@ THEMES = {
         "card": "#0F172A",
         "text": "#E2E8F0",
         "muted": "#94A3B8",
-        "ring": "#22D3EE"
+        "ring": "#22D3EE",
+        "button": "#06B6D4"
     },
     "Forest": {
         "grad": "linear-gradient(135deg, #22C55E 0%, #3B82F6 100%)",
@@ -184,90 +214,68 @@ THEMES = {
         "card": "#111827",
         "text": "#E5E7EB",
         "muted": "#9CA3AF",
-        "ring": "#10B981"
+        "ring": "#10B981",
+        "button": "#22C55E"
     },
 }
 
 DENSITY = {
-    "Comfortable": {"gap": "18px", "pad": "16px", "radius": "16px", "codefs": "13px"},
-    "Cozy":        {"gap": "12px", "pad": "12px", "radius": "14px", "codefs": "12px"},
-    "Compact":     {"gap": "8px",  "pad": "8px",  "radius": "12px", "codefs": "11px"},
+    "Comfortable": {"gap": "22px", "pad": "16px", "radius": "18px", "codefs": "13px", "btnpad": "10px 16px"},
+    "Cozy":        {"gap": "14px", "pad": "12px", "radius": "14px", "codefs": "12px", "btnpad": "8px 14px"},
+    "Compact":     {"gap": "10px", "pad": "8px",  "radius": "12px", "codefs": "11px", "btnpad": "7px 12px"},
 }
 
 
 def inject_css(theme_name: str, density: str) -> None:
     t = THEMES.get(theme_name, THEMES["Electric"])
     d = DENSITY.get(density, DENSITY["Cozy"])
-    css = f"""
-    <style>
-    :root {{
-      --grad: {t["grad"]};
-      --bg: {t["bg"]};
-      --card: {t["card"]};
-      --text: {t["text"]};
-      --muted: {t["muted"]};
-      --ring: {t["ring"]};
-      --gap: {d["gap"]};
-      --pad: {d["pad"]};
-      --radius: {d["radius"]};
-      --codefs: {d["codefs"]};
-    }}
-    /* App-wide background and text */
-    .stApp, [data-testid="stAppViewContainer"] {{
-      background: var(--bg);
-      color: var(--text);
-    }}
-    [data-testid="stHeader"] {{
-      background: transparent;
-    }}
-    /* Inputs */
-    input[type="text"], textarea {{
-      background: var(--card) !important;
-      color: var(--text) !important;
-      border: 1px solid rgba(255,255,255,.07) !important;
-      border-radius: var(--radius) !important;
-    }}
-    /* Focus ring */
-    input[type="text"]:focus, textarea:focus {{
-      outline: none !important;
-      border-color: var(--ring) !important;
-      box-shadow: 0 0 0 3px rgba(99,102,241,.18) !important;
-    }}
-    /* Code blocks */
-    pre, code {{
-      font-size: var(--codefs) !important;
-    }}
-    /* Cards & Grid */
-    .grid {{ display: grid; gap: var(--gap); grid-template-columns: repeat(12, 1fr); }}
-    .card {{
-      grid-column: span 6;
-      background: var(--card);
-      border: 1px solid rgba(255,255,255,.06);
-      border-radius: var(--radius);
-      padding: var(--pad);
-      box-shadow: 0 6px 20px rgba(0,0,0,.35);
-    }}
-    .hero {{
-      padding: var(--pad);
-      border-radius: var(--radius);
-      background: var(--card);
-      border: 1px solid rgba(255,255,255,.06);
-      box-shadow: 0 6px 20px rgba(0,0,0,.35);
-      margin-bottom: var(--gap);
-    }}
-    .hero h1 {{
-      margin: 0; font-size: 28px; font-weight: 800;
-      background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent;
-    }}
-    .chips {{ display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }}
-    .chip {{
-      padding: 6px 10px; border-radius: 999px; font-size: 12px; color: var(--text);
-      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08);
-    }}
-    .hint {{ font-size: 12px; color: var(--muted); margin-top: 4px; }}
-    .divider {{ height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent); margin: 8px 0; }}
-    </style>
-    """
+    css = (
+        "<style>"
+        ":root {"
+        "--grad: " + t["grad"] + ";"
+        "--bg: " + t["bg"] + ";"
+        "--card: " + t["card"] + ";"
+        "--text: " + t["text"] + ";"
+        "--muted: " + t["muted"] + ";"
+        "--ring: " + t["ring"] + ";"
+        "--btn: " + t["button"] + ";"
+        "--gap: " + d["gap"] + ";"
+        "--pad: " + d["pad"] + ";"
+        "--radius: " + d["radius"] + ";"
+        "--codefs: " + d["codefs"] + ";"
+        "--btnpad: " + d["btnpad"] + ";"
+        "}"
+        ".stApp, [data-testid='stAppViewContainer'] {background: var(--bg); color: var(--text);}"
+        "[data-testid='stHeader'] {background: transparent;}"
+        /* Inputs */
+        "input[type='text'], textarea {background: var(--card) !important; color: var(--text) !important; "
+        "border: 1px solid rgba(255,255,255,.07) !important; border-radius: var(--radius) !important;}"
+        "input[type='text']:focus, textarea:focus {outline: none !important; border-color: var(--ring) !important; "
+        "box-shadow: 0 0 0 3px rgba(99,102,241,.18) !important;}"
+        /* Buttons */
+        ".stButton>button, .stDownloadButton>button {"
+        "background: var(--btn); color: #0B1021; font-weight: 700; border: none; "
+        "padding: var(--btnpad); border-radius: 999px; box-shadow: 0 8px 24px rgba(0,0,0,.25);}"
+        ".stButton>button:hover, .stDownloadButton>button:hover {filter: brightness(1.05);}"
+        ".stButton>button:focus {outline: none; box-shadow: 0 0 0 3px rgba(99,102,241,.25);}"
+        /* Code blocks */
+        "pre, code {font-size: var(--codefs) !important;}"
+        /* Cards & Grid */
+        ".grid {display: grid; gap: var(--gap); grid-template-columns: repeat(12, 1fr);}"
+        ".card {grid-column: span 6; background: var(--card); border: 1px solid rgba(255,255,255,.06); "
+        "border-radius: var(--radius); padding: var(--pad); box-shadow: 0 10px 30px rgba(0,0,0,.35);}"
+        ".hero {padding: var(--pad); border-radius: var(--radius); background: var(--card); "
+        "border: 1px solid rgba(255,255,255,.06); box-shadow: 0 10px 30px rgba(0,0,0,.35); margin-bottom: var(--gap);}"
+        ".hero h1 {margin: 0; font-size: 28px; font-weight: 800; background: var(--grad); "
+        "-webkit-background-clip: text; background-clip: text; color: transparent;}"
+        ".chips {display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px;}"
+        ".chip {padding: 6px 10px; border-radius: 999px; font-size: 12px; color: var(--text); "
+        "background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08);}"
+        ".hint {font-size: 12px; color: var(--muted); margin-top: 4px;}"
+        ".divider {height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent); margin: 8px 0;}"
+        ".pill {display:inline-block;padding:4px 10px;border-radius:999px;background: var(--grad); color:#0b0f19; font-weight:700; font-size:12px;}"
+        "</style>"
+    )
     st.markdown(css, unsafe_allow_html=True)
 
 
@@ -276,11 +284,11 @@ def hero(job_title: str, category: str, location: str) -> None:
     st.markdown("<h1>AI Sourcing Assistant</h1>", unsafe_allow_html=True)
     chips = []
     if job_title:
-        chips.append(f"<span class='chip'>🎯 {job_title}</span>")
+        chips.append("<span class='chip'>🎯 " + job_title + "</span>")
     if category:
-        chips.append(f"<span class='chip'>🧠 {category.upper()}</span>")
+        chips.append("<span class='chip'>🧠 " + category.upper() + "</span>")
     if location:
-        chips.append(f"<span class='chip'>📍 {location}</span>")
+        chips.append("<span class='chip'>📍 " + location + "</span>")
     if chips:
         st.markdown("<div class='chips'>" + "".join(chips) + "</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
@@ -288,19 +296,21 @@ def hero(job_title: str, category: str, location: str) -> None:
 
 def code_card(title: str, text: str, hint: str = "") -> None:
     st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.markdown(f"<h3 style='margin:0 0 6px 0;font-size:14px;color:var(--muted);'>{title}</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='margin:0 0 6px 0;font-size:14px;color:var(--muted);'>" + title + "</h3>", unsafe_allow_html=True)
     st.code(text or "", language="text")
     if hint:
-        st.markdown(f"<div class='hint'>{hint}</div>", unsafe_allow_html=True)
+        st.markdown("<div class='hint'>" + hint + "</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ============================ Controls ============================
-c_theme, c_density = st.columns([1, 1])
+c_theme, c_density, c_mode = st.columns([1, 1, 1])
 with c_theme:
     theme_choice = st.selectbox("Theme", list(THEMES.keys()), index=0, help="Change the color system & gradients")
 with c_density:
     density_choice = st.selectbox("Density", ["Comfortable", "Cozy", "Compact"], index=1, help="Change spacing, radius & code size")
+with c_mode:
+    mode_choice = st.selectbox("Mode", ["Quick", "Pro"], index=0, help="Quick shows essentials. Pro adds full controls.")
 
 # apply theme & density
 inject_css(theme_choice, density_choice)
@@ -313,7 +323,7 @@ with cB:
     location = st.text_input("Location (optional)", placeholder="e.g., San Francisco Bay Area")
 
 extra_not = st.text_input("Extra NOT terms (comma-separated, optional)", placeholder="e.g., contractor, internship")
-build = st.button("✨ Build sourcing pack", type="primary")
+build = st.button("✨ Build sourcing pack")
 
 if build and job_title and job_title.strip():
     st.session_state["built"] = True
@@ -334,48 +344,58 @@ if st.session_state.get("built"):
     nice = st.session_state.get("nice", [])
 
     st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
-    st.subheader("✏️ Customize")
 
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        newline = chr(10)
-        titles_default = newline.join(titles)
-        titles_text = st.text_area("Titles (one per line)", value=titles_default, height=150)
-    with c2:
-        comma_space = chr(44) + chr(32)
-        must_default = comma_space.join(must)
-        must_text = st.text_area("Must-have skills (comma-separated)", value=must_default, height=120)
-        nice_default = comma_space.join(nice)
-        nice_text = st.text_area("Nice-to-have skills (comma-separated)", value=nice_default, height=120)
+    # Seniority pills (always visible post-build)
+    st.caption("Seniority focus adjusts the Title set for better precision.")
+    col_sp1, col_sp2 = st.columns([2, 5])
+    with col_sp1:
+        level = st.radio("Seniority focus", ["All", "Associate", "Mid", "Senior+", "Staff/Principal"], horizontal=True, index=0)
+    with col_sp2:
+        st.write("")
+    titles = apply_seniority(titles, level)
 
-    if st.button("Apply changes"):
-        st.session_state["titles"] = [t.strip() for t in titles_text.splitlines() if t.strip()]
-        st.session_state["must"] = [s.strip() for s in must_text.split(",") if s.strip()]
-        st.session_state["nice"] = [s.strip() for s in nice_text.split(",") if s.strip()]
-        titles = st.session_state["titles"]
-        must = st.session_state["must"]
-        nice = st.session_state["nice"]
+    if mode_choice == "Pro":
+        st.subheader("✏️ Customize")
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            newline = chr(10)
+            titles_default = newline.join(titles)
+            titles_text = st.text_area("Titles (one per line)", value=titles_default, height=150)
+        with c2:
+            comma_space = chr(44) + chr(32)
+            must_default = comma_space.join(must)
+            must_text = st.text_area("Must-have skills (comma-separated)", value=must_default, height=120)
+            nice_default = comma_space.join(nice)
+            nice_text = st.text_area("Nice-to-have skills (comma-separated)", value=nice_default, height=120)
 
-    with st.expander("📄 Paste Job Description → Auto-extract", expanded=False):
-        jd = st.text_area("Paste JD (optional)", height=160)
-        if st.button("Extract from JD"):
-            m_ex, n_ex, n_not = jd_extract(jd)
-            applied = False
-            if m_ex:
-                st.session_state["must"] = unique_preserve(m_ex)
-                applied = True
-            if n_ex:
-                st.session_state["nice"] = unique_preserve(n_ex)
-                applied = True
-            if n_not:
-                st.session_state["jd_not"] = unique_preserve(st.session_state.get("jd_not", []) + n_not)
-                applied = True
-            if applied:
-                must = st.session_state["must"]
-                nice = st.session_state["nice"]
-                st.success("JD extracted and applied.")
-            else:
-                st.info("No strong matches found — you can still edit the lists above.")
+        if st.button("Apply changes"):
+            st.session_state["titles"] = [t.strip() for t in titles_text.splitlines() if t.strip()]
+            st.session_state["must"] = [s.strip() for s in must_text.split(",") if s.strip()]
+            st.session_state["nice"] = [s.strip() for s in nice_text.split(",") if s.strip()]
+            titles = st.session_state["titles"]
+            must = st.session_state["must"]
+            nice = st.session_state["nice"]
+
+        with st.expander("📄 Paste Job Description → Auto-extract", expanded=False):
+            jd = st.text_area("Paste JD (optional)", height=160)
+            if st.button("Extract from JD"):
+                m_ex, n_ex, n_not = jd_extract(jd)
+                applied = False
+                if m_ex:
+                    st.session_state["must"] = unique_preserve(m_ex)
+                    applied = True
+                if n_ex:
+                    st.session_state["nice"] = unique_preserve(n_ex)
+                    applied = True
+                if n_not:
+                    st.session_state["jd_not"] = unique_preserve(st.session_state.get("jd_not", []) + n_not)
+                    applied = True
+                if applied:
+                    must = st.session_state["must"]
+                    nice = st.session_state["nice"]
+                    st.success("JD extracted and applied.")
+                else:
+                    st.info("No strong matches found — you can still edit the lists above.")
 
     # Build LinkedIn-ready strings
     li_title_current = or_group(titles)
