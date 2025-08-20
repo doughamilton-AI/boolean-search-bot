@@ -350,7 +350,11 @@ def _sanitize_for_linkedin(s: str) -> str:
     s = (s or "").replace("
 ", " ").replace("
 ", " ")
-    s = s.replace("—", "-").replace("–", "-").replace("“", '"').replace("”", '"').replace("’", "'")
+    s = (s.replace("—", "-")
+           .replace("–", "-")
+           .replace("“", '"')
+           .replace("”", '"')
+           .replace("’", "'"))
     s = " ".join(s.split())  # collapse whitespace
     return s
 
