@@ -496,8 +496,7 @@ if st.session_state.get("built"):
     st.subheader("✏️ Customize")
     c1, c2 = st.columns([1, 1])
     with c1:
-        titles_default = "
-".join(titles)
+        titles_default = "".join(titles)
         titles_text = st.text_area("Titles (one per line)", value=titles_default, height=180)
     with c2:
         must_default = ", ".join(must)
