@@ -457,9 +457,8 @@ if st.session_state.get("built"):
     st.subheader("✏️ Customize")
     c1, c2 = st.columns([1, 1])
     with c1:
-        titles_default = "
-".join(titles)
-        titles_text = st.text_area("Titles (one per line)", value=titles_default, height=180)
+    titles_default = "\n".join(titles)
+    titles_text = st.text_area("Titles (one per line)", value=titles_default, height=180)
     with c2:
         must_default = ", ".join(must)
         must_text = st.text_area("Must-have skills (comma-separated)", value=must_default, height=120)
@@ -533,9 +532,7 @@ if st.session_state.get("built"):
     issues = string_health_report(li_keywords)
     grade = string_health_grade(li_keywords)
     if issues:
-        st.warning("Health: " + grade + "
-" + "
-".join(["• " + x for x in issues]))
+        st.warning("Health: " + grade + "\n" + "\n".join(["• " + x for x in issues]))
         if st.button("🧹 Trim & Dedupe (suggested)"):
             must_k = canonicalize(must)[:12]
             nice_k = canonicalize(nice)[:8]
@@ -575,8 +572,7 @@ if st.session_state.get("built"):
     lines.append("")
     lines.append("SKILLS (CSV):")
     lines.append(skills_all_csv)
-    pack_text = "
-".join(lines)
+    pack_text = "\n".join(lines)
 
     # Assistant Panels (tabs)
     st.subheader("📚 Assistant Panels")
@@ -609,8 +605,7 @@ if st.session_state.get("built"):
                 """
             )
         st.markdown("**Title synonyms:**")
-        st.code("
-".join(titles), language="text")
+        st.code("\n".join(titles), language="text")
         st.markdown("**Top skills:**")
         st.code(", ".join(unique_preserve(must + nice)) or "python, java, go", language="text")
 
