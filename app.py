@@ -1,13 +1,12 @@
-# app_bright.py — AI Sourcing Assistant (Bright, Accessible UI)
-# Copy this entire file into `app.py` (or set Streamlit main file path to `app_bright.py`).
-# Requires: streamlit==1.33.0
+# app_ai_wow.py — AI Sourcing Assistant (Bright UI + AI Builder stub + Sticky Copy + URL state)
+# Copy this entire file into `app.py` (or set Streamlit main file path to `app_ai_wow.py`).
+# Requires: streamlit>=1.31
 
-import re
-from typing import List, Tuple
+import os, json, re
+from typing import List, Tuple, Dict
 import streamlit as st
 
 st.set_page_config(page_title="AI Sourcing Assistant", layout="wide")
-
 
 # ============================ Role Library (extensible) ============================
 ROLE_LIB = {
@@ -41,11 +40,10 @@ ROLE_LIB = {
 SMART_NOT = [
     "intern", "internship", "fellow", "bootcamp", "student", "professor",
     "sales", "marketing", "hr", "talent acquisition", "recruiter",
-    "customer support", "help desk", "desktop support", "qa tester"
+    "customer support", "help desk", "desktop support", "qa tester", "graphic designer"
 ]
 
-
-# ============================ Company Sets (top-tech, editable) ============================
+# ============================ Company Sets (top-tech + metros, editable) ============================
 COMPANY_SETS = {
     "faang_plus": [
         "Google", "Meta", "Apple", "Amazon", "Netflix", "Microsoft",
@@ -63,26 +61,34 @@ COMPANY_SETS = {
         "Databricks", "Confluent", "Elastic", "Snyk", "GitHub", "GitLab",
         "JetBrains", "CircleCI", "PagerDuty", "New Relic", "Grafana Labs", "Postman"
     ],
-    "consumer_social": [
-        "YouTube", "Instagram", "WhatsApp", "Snap", "TikTok", "Pinterest",
-        "Reddit", "Spotify", "Discord"
-    ],
-    "marketplaces": [
-        "Uber", "Lyft", "DoorDash", "Instacart", "Airbnb", "Etsy",
-        "Amazon Marketplace", "Shopify"
-    ],
     "enterprise_saas": [
         "Salesforce", "ServiceNow", "Workday", "Atlassian", "Slack",
         "Notion", "Asana", "Zoom", "Box", "Dropbox"
+    ],
+    "consumer_social": [
+        "YouTube", "Instagram", "WhatsApp", "Snap", "TikTok", "Pinterest",
+        "Reddit", "Spotify", "Discord"
     ],
     "fintech": [
         "Stripe", "Square", "Plaid", "Coinbase", "Robinhood", "Brex",
         "Ramp", "Affirm", "Chime", "SoFi"
     ],
+    "marketplaces": [
+        "Uber", "Lyft", "DoorDash", "Instacart", "Airbnb", "Etsy",
+        "Amazon Marketplace", "Shopify"
+    ],
     "high_growth": [
         "Rippling", "Figma", "Canva", "Retool", "Glean", "Snowflake",
         "Databricks", "Cloudflare", "Notion", "Scale AI"
     ],
+}
+
+METRO_COMPANIES = {
+    "Any": [],
+    "Bay Area": ["Google", "Meta", "Apple", "Netflix", "NVIDIA", "Airbnb", "Stripe", "Uber", "Databricks", "Snowflake", "DoorDash"],
+    "New York": ["Google", "Meta", "Amazon", "Spotify", "Datadog", "MongoDB", "Ramp", "Plaid", "Etsy"],
+    "Seattle": ["Amazon", "Microsoft", "AWS", "Azure", "Tableau"],
+    "Remote-first": ["GitLab", "Automattic", "Zapier", "Stripe", "Dropbox", "Doist"],
 }
 
 ROLE_TO_GROUPS = {
@@ -91,6 +97,14 @@ ROLE_TO_GROUPS = {
     "sre": ["cloud_infra", "faang_plus", "devtools_data", "enterprise_saas", "marketplaces", "high_growth"],
 }
 
+# ============================ Synonyms (canonicalization) ============================
+SYNONYMS: Dict[str, str] = {
+    "golang": "go",
+    "k8s": "kubernetes",
+    "llm": "large language model",
+    "tf": "tensorflow",
+    "py": "python",
+}
 
 # ============================ Helpers ============================
 def unique_preserve(seq: List[str]) -> List[str]:
@@ -103,6 +117,16 @@ def unique_preserve(seq: List[str]) -> List[str]:
         if key not in seen:
             seen.add(key)
             out.append(x2)
+    return out
+
+
+def canonicalize(tokens: List[str]) -> List[str]:
+    out, seen = [], set()
+    for t in tokens:
+        c = SYNONYMS.get((t or "").lower(), t or "").strip()
+        k = c.lower()
+        if k and k not in seen:
+            seen.add(k); out.append(c)
     return out
 
 
@@ -121,11 +145,9 @@ def or_group(items: List[str]) -> str:
 
 def map_title_to_category(title: str) -> str:
     s = (title or "").lower()
-    sre_terms = ["sre", "site reliability", "reliab", "devops", "platform reliability"]
-    if any(t in s for t in sre_terms):
+    if any(t in s for t in ["sre", "site reliability", "reliab", "devops", "platform reliability"]):
         return "sre"
-    ml_terms = ["machine learning", "ml engineer", "applied scientist", "data scientist", "ai engineer", " ml ", "ml-", "ml/"]
-    if any(t in s for t in ml_terms):
+    if any(t in s for t in ["machine learning", "ml engineer", "applied scientist", "data scientist", "ai engineer", " ml ", "ml-", "ml/"]):
         return "ml"
     return "swe"
 
@@ -142,16 +164,14 @@ def expand_titles(base_titles: List[str], cat: str) -> List[str]:
 
 
 def build_keywords(must: List[str], nice: List[str], nots: List[str], qualifiers: List[str] = None) -> str:
-    base = unique_preserve(must + nice)
-    if qualifiers:
-        base = base + [q for q in qualifiers if q]
+    base = unique_preserve(must + nice + (qualifiers or []))
     core = or_group(base)
     if not core:
         return ""
     nots2 = unique_preserve(nots)
-    if nots2:
-        return core + " NOT (" + " OR ".join(nots2) + ")"
-    return core
+    if not nots2:
+        return core
+    return core + " NOT (" + " OR ".join(nots2) + ")"
 
 
 def jd_extract(jd_text: str) -> Tuple[List[str], List[str], List[str]]:
@@ -179,19 +199,28 @@ def string_health_report(s: str) -> List[str]:
         issues.append("Keywords look long (>900 chars); consider trimming.")
     if s.count(" OR ") > 80:
         issues.append("High OR count; remove niche/redundant terms.")
-    depth = 0
-    ok = True
+    depth = 0; ok = True
     for ch in s:
-        if ch == "(":
-            depth += 1
+        if ch == "(": depth += 1
         elif ch == ")":
             depth -= 1
-            if depth < 0:
-                ok = False
-                break
+            if depth < 0: ok = False; break
     if depth != 0 or not ok:
         issues.append("Unbalanced parentheses; copy fresh strings or simplify.")
     return issues
+
+
+def string_health_grade(s: str) -> str:
+    if not s:
+        return "F"
+    score = 100
+    if len(s) > 900: score -= 25
+    orc = s.count(" OR ")
+    if orc > 80: score -= 25
+    if orc > 40: score -= 15
+    if any(x in string_health_report(s) for x in ["Unbalanced parentheses"]):
+        score -= 25
+    return "A" if score >= 90 else "B" if score >= 80 else "C" if score >= 70 else "D" if score >= 60 else "E" if score >= 50 else "F"
 
 
 def apply_seniority(titles: List[str], level: str) -> List[str]:
@@ -219,14 +248,163 @@ def apply_seniority(titles: List[str], level: str) -> List[str]:
             seen.add(xl); res.append(x)
     return res[:24]
 
+# ============================ AI Builder (stub) ============================
+SCHEMA_KEYS = ["titles", "skills", "not_terms", "company_or", "rationales"]
 
-# ============================ Bright Themes (no dark background) ============================
+def call_llm(payload: Dict) -> Dict:
+    """OpenAI-backed implementation using Structured Outputs (JSON Schema).
+    Returns {} to trigger fallback if key/module unavailable or parsing fails.
+    """
+    key = os.getenv("OPENAI_API_KEY")
+    if not key:
+        return {}
+    try:
+        # Import inside function so app still runs without SDK installed
+        from openai import OpenAI  # type: ignore
+    except Exception:
+        return {}
+
+    client = OpenAI(api_key=key)
+
+    # JSON Schema the model must follow (strict)
+    schema: Dict = {
+        "type": "object",
+        "properties": {
+            "role_family": {"type": "string", "enum": ["swe","ml","sre","data","security","mobile"]},
+            "titles": {
+                "type": "object",
+                "properties": {
+                    "must":   {"type": "array", "items": {"type": "string"}},
+                    "variants":{"type": "array", "items": {"type": "string"}}
+                },
+                "required": ["must","variants"],
+                "additionalProperties": False
+            },
+            "skills": {
+                "type": "object",
+                "properties": {
+                    "must": {"type": "array", "items": {"type": "string"}},
+                    "nice": {"type": "array", "items": {"type": "string"}}
+                },
+                "required": ["must","nice"],
+                "additionalProperties": False
+            },
+            "not_terms":  {"type": "array", "items": {"type": "string"}},
+            "company_or": {"type": "array", "items": {"type": "string"}},
+            "rationales": {
+                "type": "object",
+                "properties": {
+                    "titles": {"type": "string"},
+                    "skills": {"type": "string"},
+                    "not_terms": {"type": "string"},
+                    "company_or": {"type": "string"}
+                },
+                "additionalProperties": False
+            }
+        },
+        "required": ["titles","skills","not_terms","company_or"],
+        "additionalProperties": False
+    }
+
+    # Build prompts without fragile triple quotes
+    sys_lines = [
+        "You are an expert technical sourcer for top tech.",
+        "Return JSON ONLY that matches the provided schema exactly.",
+        "Prefer canonical skills and realistic titles from the ontology.",
+        "Use synonyms map to normalize tokens (e.g., golang→go, k8s→kubernetes).",
+        "If uncertain, bias toward precision over coverage.",
+    ]
+    system_prompt = "
+".join(sys_lines)
+
+    mode = payload.get("mode", "coverage")
+    jt = payload.get("job_title", "")
+    jd = payload.get("job_description", "")
+    loc = payload.get("location", "")
+
+    # Compact, explicit user message + embedded context JSON
+    context_obj = {
+        "ontology": payload.get("ontology", {}),
+        "synonyms": payload.get("synonyms", {}),
+        "company_segments": payload.get("company_segments", {}),
+        "caps": {"mode": mode, "titles": 22 if mode=="coverage" else 10}
+    }
+    user_lines = [
+        "JOB_TITLE: " + jt,
+        "LOCATION: " + (loc or ""),
+        "MODE: " + mode,
+        "JD:
+" + (jd or "(none)") + "
+",
+        "CONTEXT:
+" + json.dumps(context_obj, ensure_ascii=False)
+    ]
+    user_prompt = "
+".join(user_lines)
+
+    try:
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            temperature=0.2 if mode == "precision" else 0.3,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "SourcingPack",
+                    "schema": schema,
+                    "strict": True
+                }
+            },
+        )
+        content = completion.choices[0].message.content or "{}"
+        return json.loads(content)
+    except Exception:
+        return {}
+
+
+def build_ai_pack(job_title: str, jd_text: str, location: str, mode: str) -> Dict | None:(job_title: str, jd_text: str, location: str, mode: str) -> Dict | None:
+    payload = {
+        "job_title": job_title,
+        "job_description": jd_text or "",
+        "location": location or "",
+        "mode": mode,
+        "ontology": ROLE_LIB,
+        "synonyms": SYNONYMS,
+        "company_segments": COMPANY_SETS,
+    }
+    raw = call_llm(payload) or {}
+    # If no usable keys, signal fallback
+    if not any(k in raw for k in SCHEMA_KEYS):
+        return None
+    # Validate + canonicalize
+    titles = canonicalize((raw.get("titles", {}).get("must", []) or []) + (raw.get("titles", {}).get("variants", []) or []))
+    skills_must = canonicalize(raw.get("skills", {}).get("must", []) or [])
+    skills_nice = canonicalize(raw.get("skills", {}).get("nice", []) or [])
+    not_terms = canonicalize(raw.get("not_terms", []) or [])
+    companies = canonicalize(raw.get("company_or", []) or [])
+    # Cap by mode
+    if mode == "precision":
+        titles = titles[:10]; skills_must = skills_must[:12]; skills_nice = skills_nice[:6]; not_terms = not_terms[:8]; companies = companies[:20]
+    else:
+        titles = titles[:22]; skills_must = skills_must[:20]; skills_nice = skills_nice[:10]; not_terms = not_terms[:12]; companies = companies[:30]
+    return {
+        "titles": titles,
+        "skills_must": skills_must,
+        "skills_nice": skills_nice,
+        "not_terms": not_terms,
+        "companies": companies,
+        "rationales": raw.get("rationales", {}),
+    }
+
+# ============================ Bright Theme CSS ============================
 THEMES = {
     "Sky":   {"grad": "linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%)", "bg": "#F8FAFC", "card": "#FFFFFF", "text": "#0F172A", "muted": "#475569", "ring": "#3B82F6", "button": "#2563EB"},
     "Coral": {"grad": "linear-gradient(135deg, #FB7185 0%, #F59E0B 100%)", "bg": "#FFF7ED", "card": "#FFFFFF", "text": "#111827", "muted": "#6B7280", "ring": "#F97316", "button": "#F97316"},
     "Mint":  {"grad": "linear-gradient(135deg, #34D399 0%, #22D3EE 100%)", "bg": "#ECFEFF", "card": "#FFFFFF", "text": "#0F172A", "muted": "#334155", "ring": "#10B981", "button": "#10B981"},
 }
-
 
 def inject_css(theme_name: str) -> None:
     t = THEMES.get(theme_name, THEMES["Sky"])
@@ -269,8 +447,8 @@ def inject_css(theme_name: str) -> None:
         "border-radius: var(--radius); padding: var(--pad); box-shadow: 0 6px 24px rgba(2,6,23,.06);}",
         ".hint {font-size: 12px; color: var(--muted); margin-top: 4px;}",
         ".divider {height: 1px; background: linear-gradient(90deg, transparent, rgba(2,6,23,.15), transparent); margin: 8px 0;}",
-        ".tagrow {display:flex; gap:8px; flex-wrap:wrap;}",
-        ".tagbtn {background: rgba(2,6,23,.06); border: 1px solid rgba(2,6,23,.1); border-radius: 999px; padding: 6px 10px; font-size: 12px;}",
+        ".sticky {position: fixed; left: 0; right: 0; bottom: 12px; z-index: 9999; display:flex; gap:8px; justify-content:center;}",
+        ".sticky .btn {background: var(--btn); color:#fff; padding:8px 12px; border-radius:999px; font-weight:700; border:none;}",
         "</style>",
     ]
     st.markdown("".join(parts), unsafe_allow_html=True)
@@ -299,42 +477,74 @@ def code_card(title: str, text: str, hint: str = "") -> None:
         st.markdown("<div class='hint'>" + hint + "</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
+# ============================ URL State ============================
+qp = st.experimental_get_query_params()
+def qp_get(name: str, default: str = "") -> str:
+    v = qp.get(name, [default])
+    return v[0] if isinstance(v, list) else (v or default)
 
-# ============================ UI ============================
+def qp_set(**kwargs):
+    st.experimental_set_query_params(**kwargs)
+
+# ============================ UI: Inputs ============================
 col_theme = st.columns([1])[0]
 with col_theme:
-    theme_choice = st.selectbox("Theme", list(THEMES.keys()), index=0, help="Bright color systems")
+    theme_choice = st.selectbox("Theme", list(THEMES.keys()), index=[*THEMES].index(qp_get("theme", "Sky")))
 inject_css(theme_choice)
 
 st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
-cA, cB = st.columns([3, 2])
-with cA:
-    job_title = st.text_input("Search by job title", placeholder="e.g., Senior Machine Learning Engineer")
-with cB:
-    location = st.text_input("Location (optional)", placeholder="e.g., New York, Remote, Bay Area")
+left, right = st.columns([3, 2])
+with left:
+    job_title = st.text_input("Search by job title", value=qp_get("title", ""), placeholder="e.g., Staff Machine Learning Engineer")
+with right:
+    location = st.text_input("Location (optional)", value=qp_get("loc", ""), placeholder="e.g., New York, Remote, Bay Area")
 
-extra_not = st.text_input("Extra NOT terms (comma-separated, optional)", placeholder="e.g., contractor, internship")
+extra_not = st.text_input("Extra NOT terms (comma-separated, optional)", value=qp_get("not", ""), placeholder="e.g., contractor, internship")
 
-cf1, cf2, cf3 = st.columns(3)
-with cf1:
-    level = st.selectbox("Seniority", ["All", "Associate", "Mid", "Senior+", "Staff/Principal"], index=0)
-with cf2:
-    env = st.selectbox("Work setting", ["Any", "On-site", "Hybrid", "Remote"], index=0)
-with cf3:
-    size = st.selectbox("Company size focus", ["Any", "Startup", "Growth", "Enterprise"], index=0)
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    level = st.selectbox("Seniority", ["All", "Associate", "Mid", "Senior+", "Staff/Principal"], index=["All","Associate","Mid","Senior+","Staff/Principal"].index(qp_get("level", "All")))
+with col2:
+    env = st.selectbox("Work setting", ["Any", "On-site", "Hybrid", "Remote"], index=["Any","On-site","Hybrid","Remote"].index(qp_get("env", "Any")))
+with col3:
+    size = st.selectbox("Company size", ["Any", "Startup", "Growth", "Enterprise"], index=["Any","Startup","Growth","Enterprise"].index(qp_get("size", "Any")))
+with col4:
+    metro = st.selectbox("Metro focus", list(METRO_COMPANIES.keys()), index=list(METRO_COMPANIES.keys()).index(qp_get("metro", "Any")))
 
-build = st.button("✨ Build sourcing pack")
+ai_mode = st.toggle("🤖 Use AI Builder (beta)", value=(qp_get("aimode", "off") == "on"), help="Let AI propose titles/skills/NOT/companies. Falls back if unavailable.")
 
-if build and job_title and job_title.strip():
+if st.button("✨ Build sourcing pack") and (job_title or "").strip():
+    qp_set(title=job_title, loc=location, level=level, env=env, size=size, metro=metro, theme=theme_choice, aimode=("on" if ai_mode else "off"))
     st.session_state["built"] = True
     st.session_state["role_title"] = job_title
     st.session_state["location"] = location
     st.session_state["category"] = map_title_to_category(job_title)
+
+    # Default packs from ontology
     R = ROLE_LIB[st.session_state["category"]]
-    titles_seed = expand_titles(R["titles"], st.session_state["category"])
+    titles_seed = expand_titles(R["titles"], st.session_state["category"])    
+    must_seed = list(R["must"]) 
+    nice_seed = list(R["nice"]) 
+    not_seed = list(SMART_NOT)
+    companies_seed = []
+
+    # Optionally AI augment
+    if ai_mode:
+        ai = build_ai_pack(job_title, "", location, mode=("precision" if level in ["Senior+","Staff/Principal"] else "coverage"))
+        if ai:
+            titles_seed = unique_preserve(ai.get("titles", []) + titles_seed)
+            must_seed = unique_preserve(ai.get("skills_must", []) + must_seed)
+            nice_seed = unique_preserve(ai.get("skills_nice", []) + nice_seed)
+            not_seed = unique_preserve(not_seed + ai.get("not_terms", []))
+            companies_seed = unique_preserve(ai.get("companies", []))
+        else:
+            st.info("AI Builder unavailable; using heuristic pack.")
+
     st.session_state["titles"] = titles_seed
-    st.session_state["must"] = list(R["must"])
-    st.session_state["nice"] = list(R["nice"])
+    st.session_state["must"] = must_seed
+    st.session_state["nice"] = nice_seed
+    st.session_state["not_terms"] = not_seed
+    st.session_state["companies_ai"] = companies_seed
 
 category = st.session_state.get("category", "")
 hero(st.session_state.get("role_title", ""), category, st.session_state.get("location", ""))
@@ -343,8 +553,16 @@ if st.session_state.get("built"):
     titles = st.session_state.get("titles", [])
     must = st.session_state.get("must", [])
     nice = st.session_state.get("nice", [])
+    base_not = st.session_state.get("not_terms", [])
 
     st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
+
+    # Auto-infer seniority from title text (light heuristic)
+    title_lower = (st.session_state.get("role_title", "") or "").lower()
+    if any(w in title_lower for w in ["staff", "principal"]):
+        level = "Staff/Principal"
+    elif any(w in title_lower for w in ["senior", "sr "]):
+        level = "Senior+"
 
     # Seniority adjustment affects title set for LinkedIn title fields
     titles = apply_seniority(titles, level)
@@ -355,7 +573,7 @@ if st.session_state.get("built"):
     with c1:
         newline = chr(10)
         titles_default = newline.join(titles)
-        titles_text = st.text_area("Titles (one per line)", value=titles_default, height=150)
+        titles_text = st.text_area("Titles (one per line)", value=titles_default, height=160)
     with c2:
         comma_space = chr(44) + chr(32)
         must_default = comma_space.join(must)
@@ -363,74 +581,89 @@ if st.session_state.get("built"):
         nice_default = comma_space.join(nice)
         nice_text = st.text_area("Nice-to-have skills (comma-separated)", value=nice_default, height=120)
 
+    # JD extraction (optional)
+    with st.expander("📄 Paste JD → Auto-extract (optional)"):
+        jd = st.text_area("Paste JD (optional)", height=160)
+        if st.button("Extract from JD"):
+            m_ex, n_ex, n_not = jd_extract(jd)
+            applied = False
+            if m_ex:
+                must = unique_preserve(m_ex + must); applied = True
+            if n_ex:
+                nice = unique_preserve(n_ex + nice); applied = True
+            if n_not:
+                base_not = unique_preserve(base_not + n_not); applied = True
+            if applied:
+                st.success("JD terms applied.")
+            else:
+                st.info("No strong matches found.")
+
+    # Apply user edits
     if st.button("Apply changes"):
-        st.session_state["titles"] = [t.strip() for t in titles_text.splitlines() if t.strip()]
-        st.session_state["must"] = [s.strip() for s in must_text.split(",") if s.strip()]
-        st.session_state["nice"] = [s.strip() for s in nice_text.split(",") if s.strip()]
-        titles = st.session_state["titles"]
-        must = st.session_state["must"]
-        nice = st.session_state["nice"]
+        titles = [t.strip() for t in titles_text.splitlines() if t.strip()]
+        must = [s.strip() for s in must_text.split(",") if s.strip()]
+        nice = [s.strip() for s in nice_text.split(",") if s.strip()]
+        st.session_state["titles"], st.session_state["must"], st.session_state["nice"] = titles, must, nice
 
-    # Qualifiers bias Keywords only
-    qual = []
-    if env == "Remote":
-        qual.append("remote")
-    elif env == "Hybrid":
-        qual.append("hybrid")
-    elif env == "On-site":
-        qual.append("on-site")
-    if size == "Startup":
-        qual.append("startup")
-    elif size == "Growth":
-        qual.append("scale-up")
-    elif size == "Enterprise":
-        qual.append("enterprise")
-    qual = qual + ["highly scalable", "high throughput"]
-
-    # Build LinkedIn-ready strings
-    li_title_current = or_group(titles)
-    li_title_past = or_group(titles[: min(20, len(titles))])
-    extra_not_list = [t.strip() for t in (extra_not or "").split(",") if t.strip()]
-    all_not = unique_preserve(SMART_NOT + st.session_state.get("jd_not", []) + extra_not_list)
-    li_keywords = build_keywords(must, nice, all_not, qualifiers=qual)
-    skills_all_csv = ", ".join(unique_preserve(must + nice))
-
-    # Health & confetti
-    issues = string_health_report(li_keywords)
-    if issues:
-        joiner = chr(10)
-        st.warning(joiner.join(["• " + x for x in issues]))
-    else:
-        st.success("✅ String looks healthy and ready to paste into LinkedIn.")
-        st.balloons()
-
-    # ================== New: Company Targets ==================
-    st.subheader("🏢 Company Targets — Top tech where this role is common")
+    # Company targets (segments + metro + custom add)
+    st.subheader("🏢 Company Targets — common employers for this role")
     group_order = ROLE_TO_GROUPS.get(category or "swe", ["faang_plus"]) 
     default_sel = group_order[:3] if len(group_order) >= 3 else group_order
     selected_groups = st.multiselect("Segments", options=group_order, default=default_sel, help="Choose segments to populate the company list.")
+    custom_companies = st.text_area("Add companies (comma-separated)", placeholder="e.g., Two Sigma, Bloomberg, Robinhood", height=80)
 
     companies = []
     for g in selected_groups:
         companies.extend(COMPANY_SETS.get(g, []))
+    companies.extend(METRO_COMPANIES.get(metro, []))
+    companies.extend(st.session_state.get("companies_ai", []))
+    companies.extend([c.strip() for c in (custom_companies or "").split(",") if c.strip()])
     companies = unique_preserve(companies)
 
+    # Qualifiers bias Keywords only
+    qual = []
+    if env == "Remote": qual.append("remote")
+    elif env == "Hybrid": qual.append("hybrid")
+    elif env == "On-site": qual.append("on-site")
+    if size == "Startup": qual.append("startup")
+    elif size == "Growth": qual.append("scale-up")
+    elif size == "Enterprise": qual.append("enterprise")
+    qual = qual + ["highly scalable", "high throughput"]
+
+    # Build strings
+    extra_not_list = [t.strip() for t in (extra_not or "").split(",") if t.strip()]
+    all_not = unique_preserve(base_not + extra_not_list)
+    li_title_current = or_group(titles)
+    li_title_past = or_group(titles[: min(20, len(titles))])
+    li_keywords = build_keywords(canonicalize(must), canonicalize(nice), canonicalize(all_not), qualifiers=canonicalize(qual))
     companies_or = or_group(companies)
-    companies_csv = ", ".join(companies)
+    skills_all_csv = ", ".join(unique_preserve(must + nice))
 
-    st.markdown("**Companies (OR)** — Paste into LinkedIn: People → Current company or Past company")
-    st.code(companies_or or '("Google" OR "Meta")', language="text")
-    st.markdown("**Companies (CSV)** — For sheets/notes")
-    st.code(companies_csv or 'Google, Meta', language="text")
+    # Health + grade + quick fix
+    issues = string_health_report(li_keywords)
+    grade = string_health_grade(li_keywords)
+    if issues:
+        joiner = chr(10)
+        st.warning("Health: " + grade + joiner + joiner.join(["• " + x for x in issues]))
+        if st.button("🧹 Trim & Dedupe (suggested)"):
+            # Simple trim: keep top-k of must/nice; rebuild
+            must_k = canonicalize(must)[:12]
+            nice_k = canonicalize(nice)[:8]
+            all_not_k = canonicalize(all_not)[:10]
+            li_keywords = build_keywords(must_k, nice_k, all_not_k, qualifiers=canonicalize(qual))
+            st.success("Applied trim/dedupe.")
+    else:
+        st.success("✅ String looks healthy (" + grade + ") and ready to paste into LinkedIn.")
+        st.balloons()
 
-    # Boolean Pack — bright cards
+    # Blocks
     st.subheader("🎯 Boolean Pack (LinkedIn fields)")
     st.caption("Each block is copyable — paste into the matching LinkedIn field.")
     st.markdown("<div class='grid'>", unsafe_allow_html=True)
     code_card("Title (Current) • People → Title (Current)", li_title_current)
     code_card("Title (Past) • People → Title (Past)", li_title_past)
     code_card("Keywords (Boolean) • People → Keywords", li_keywords)
-    code_card("Skills (CSV) • People → Skills", skills_all_csv)
+    code_card("Companies (OR) • People → Current/Past company", companies_or)
     st.markdown("</div>", unsafe_allow_html=True)
 
     # Export
@@ -457,14 +690,29 @@ if st.session_state.get("built"):
     pack_text = joiner.join(lines)
     st.download_button("Download pack (.txt)", data=pack_text, file_name="sourcing_pack.txt")
 
-    # Guidance panel
+    # Sticky Copy Bar (copy 4 key blocks)
+    def js_escape(s: str) -> str:
+        try:
+            return json.dumps(s or "")
+        except Exception:
+            return json.dumps("")
+    html = []
+    html.append("<div class='sticky'>")
+    html.append("<button class='btn' onclick=\"navigator.clipboard.writeText(" + js_escape(li_title_current) + ")\">Copy Title(Current)</button>")
+    html.append("<button class='btn' onclick=\"navigator.clipboard.writeText(" + js_escape(li_title_past) + ")\">Copy Title(Past)</button>")
+    html.append("<button class='btn' onclick=\"navigator.clipboard.writeText(" + js_escape(li_keywords) + ")\">Copy Keywords</button>")
+    html.append("<button class='btn' onclick=\"navigator.clipboard.writeText(" + js_escape(companies_or) + ")\">Copy Companies</button>")
+    html.append("</div>")
+    st.components.v1.html("".join(html), height=70)
+
+    # Guidance
     st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
     st.subheader("💡 Pro tips for LinkedIn Recruiter")
     st.markdown("- Put **Title (Current)** and **Title (Past)** into their matching fields.")
-    st.markdown("- Put **Keywords** into **People → Keywords** (leave companies empty for broader discovery).")
-    st.markdown("- Use **Companies (OR)** in **Current/Past company** when you want alumni targeting.")
-    st.markdown("- Use **Location** filter separately for geo targeting; this app keeps strings portable.")
-    st.markdown("- Trim Keywords if OR count is very high to improve recall & speed.")
+    st.markdown("- Use **Keywords** for skills, frameworks, and context (we add work setting/size qualifiers here).")
+    st.markdown("- Use **Companies (OR)** in **Current/Past company** to target alumni.")
+    st.markdown("- Apply location filters in LinkedIn separately—keeps strings portable.")
+    st.markdown("- If volume is too high, use Seniority = Senior+/Staff and click **Trim & Dedupe**.")
 
 else:
     st.info("Type a job title (try 'Staff Machine Learning Engineer'), pick a bright theme, then click **Build sourcing pack**.")
