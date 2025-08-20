@@ -346,113 +346,25 @@ def _init_from_query_params():
 # ============================= Helpers =============================
 
 def _sanitize_for_linkedin(s: str) -> str:
-    """Make a boolean string safer for LinkedIn's URL search box."""
+    """Make a boolean string safer for LinkedIn's URL search box using code-point mappings (no fragile quotes)."""
     s = s or ""
-    # Replace newlines and carriage returns with spaces
+    # Replace newline/carriage returns with spaces
     s = s.replace("
 ", " ").replace("
 ", " ")
-    # Translate curly punctuation to ASCII using a safe translation table
-    trans = str.maketrans({
-        "—": "-",
-        "–": "-",
-        "“": '"',
-        "”": '"',
-        "’": "'",
-        "…": "...",
-    })
+    # Normalize curly punctuation to ASCII using Unicode code points
+    trans = {
+        ord('—'): '-',  # em dash —
+        ord('–'): '-',  # en dash –
+        ord('“'): '"', # left double quote “
+        ord('”'): '"', # right double quote ”
+        ord('‘'): "'", # left single quote ‘
+        ord('’'): "'", # right single quote ’
+        ord('…'): '...',# ellipsis …
+    }
     s = s.translate(trans)
     # Collapse whitespace
     s = " ".join(s.split())
-    return s.strip()
-
-
-def _all_aliases_for(cat: str) -> List[str]:
-    base = ROLE_LIB.get(cat, {}).get("titles", [])
-    return base + title_abbrevs_for(cat) + EXTRA_ALIASES.get(cat, [])
-
-
-def guess_category_fuzzy(title: str) -> str:
-    tnorm = _normalize_title(title)
-    best_cat, best_score = None, 0.0
-    for cat in ROLE_LIB.keys():
-        for alias in _all_aliases_for(cat):
-            score = SequenceMatcher(None, tnorm, _normalize_title(alias)).ratio()
-            if score > best_score:
-                best_score, best_cat = score, cat
-    if best_score >= 0.42:
-        return best_cat
-    # Token overlap fallback
-    tokens = set(tnorm.split())
-    best_cat2, best_overlap = None, -1
-    for cat in ROLE_LIB.keys():
-        alias_tokens = set()
-        for alias in _all_aliases_for(cat):
-            alias_tokens.update(_normalize_title(alias).split())
-        overlap = len(tokens & alias_tokens)
-        if overlap > best_overlap:
-            best_overlap, best_cat2 = overlap, cat
-    return best_cat2 or "pm"
-
-
-def map_title_to_category_any(title: str) -> str:
-    primary = map_title_to_category(title)
-    if primary == "pm" and title:
-        return guess_category_fuzzy(title)
-    return primary
-
-# ============================= Theming =============================
-PALETTES = {
-    "Indigo → Pink": {"bg":"linear-gradient(90deg,#4f46e5,#db2777)", "chip":"#eef2ff", "accent":"#4f46e5"},
-    "Emerald → Teal": {"bg":"linear-gradient(90deg,#059669,#14b8a6)", "chip":"#ecfdf5", "accent":"#059669"},
-    "Amber → Rose": {"bg":"linear-gradient(90deg,#f59e0b,#f43f5e)", "chip":"#fffbeb", "accent":"#f59e0b"},
-}
-
-# ============================= UI =============================
-st.set_page_config(page_title="AI Sourcing Assistant", page_icon="🎯", layout="wide")
-
-col_theme, _ = st.columns([1,6])
-with col_theme:
-    theme_choice = st.selectbox("Theme", list(PALETTES.keys()), index=0)
-P = PALETTES[theme_choice]
-
-CSS = f"""
-<style>
-.header {{
-  background: {P['bg']};
-  color: white; padding: 18px 22px; border-radius: 18px;
-  box-shadow: 0 8px 24px rgba(0,0,0,.12);
-}}
-.card {{ border:1px solid #e6e6e6; padding:1rem; border-radius:16px; box-shadow:0 1px 2px rgba(0,0,0,.06); }}
-.badge {{ display:inline-block; padding:.25rem .6rem; margin:.2rem; border-radius:999px; background:{P['chip']}; font-size:.85rem }}
-.kicker {{ opacity:.9; font-size:.95rem; margin-bottom:.25rem }}
-.h2 {{ font-weight:800; font-size:1.35rem; margin:.25rem 0 .5rem }}
-.small {{ opacity:.9; font-size:.9rem }}
-.primary {{ color:{P['accent']}; font-weight:700 }}
-.subcap {{ color:#6b7280; font-size:.9rem; margin-top:.25rem }}
-.btncopy {{ background:{P['accent']}; color:white; border:none; border-radius:10px; padding:.35rem .6rem; font-size:.85rem; cursor:pointer; }}
-.btncopy:hover {{ opacity:.95 }}
-.textarea {{ width:100%; resize:vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; padding:.85rem 1rem; border-radius:12px; border:1px solid #e5e7eb; background:#ffffff; min-height:160px; font-size:15px; line-height:1.45; box-shadow: inset 0 1px 2px rgba(0,0,0,.04); }} 
-.textarea:focus {{ outline:none; border-color:#a5b4fc; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }}
-.blocktitle {{ font-weight:700; margin-bottom:.4rem }}
-.grid {{ display:grid; grid-template-columns: 1fr 1fr; gap: 14px; }}
-.grid-full {{ display:grid; grid-template-columns: 1fr; gap: 14px; }}
-.cardlite {{ border:1px solid #eaeaea; padding:1rem; border-radius:14px; background: linear-gradient(180deg,#ffffff,#f9fafb); box-shadow: 0 6px 18px rgba(0,0,0,.06); }}
-</style>
-"""
-st.markdown(CSS, unsafe_allow_html=True)
-
-st.markdown("""
-<div class="header">
-  <div class="kicker">AI‑forward recruiting utility</div>
-  <div class="h2">🎯 AI Sourcing Assistant</div>
-  <div class="small">Paste results into LinkedIn. Boolean Pack focuses on <b>Titles</b>, <b>Keywords</b>, and <b>Skills</b> for quick copy.</div>
-</div>
-""", unsafe_allow_html=True)
-
-# ---------- Tiny HTML copy card helper ----------
-
-def _html_escape(s: str) -> str:
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
