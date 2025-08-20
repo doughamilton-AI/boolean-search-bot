@@ -365,6 +365,23 @@ def _sanitize_for_linkedin(s: str) -> str:
     s = s.translate(trans)
     # Collapse whitespace
     s = " ".join(s.split())
+    return s
+
+
+def _preview_variants_for_linkedin(titles: List[str], must: List[str], nice: List[str], li_keywords: str):
+    """Return (keywords_only_no_not, titles_plus_keywords_lite, full_boolean)."""
+    core_part = li_keywords.split(" NOT ")[0].strip() if " NOT " in li_keywords else li_keywords
+    k_only = _sanitize_for_linkedin(core_part)
+    # small, safe title+keyword mix for preview volume sniff
+    t_lite = or_group(titles[:5]) if titles else ""
+    m_lite = or_group((must + nice)[:6]) if (must or nice) else ""
+    tk_lite = _sanitize_for_linkedin(f"{t_lite} AND {m_lite}") if t_lite and m_lite else k_only
+    k_full = _sanitize_for_linkedin(li_keywords)
+    return k_only, tk_lite, k_full
+
+
+def _html_escape(s: str) -> str:
+    s = s or ""
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
