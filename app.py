@@ -472,13 +472,24 @@ def code_card(title: str, text: str, hint: str = "") -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ============================ URL State ============================
-qp = st.experimental_get_query_params()
+qp = st.query_params
+
 def qp_get(name: str, default: str = "") -> str:
-    v = qp.get(name, [default])
-    return v[0] if isinstance(v, list) else (v or default)
+    val = qp.get(name, None)
+    # val can be a str or a list[str]
+    if val is None:
+        return default
+    if isinstance(val, list):
+        return val[0] if val else default
+    return val or default
+
 
 def qp_set(**kwargs):
-    st.experimental_set_query_params(**kwargs)
+    # Replace all params so the URL is stable/shareable
+    qp.clear()
+    for k, v in kwargs.items():
+        # Streamlit accepts str or list[str]
+        qp[k] = v
 
 # ============================ UI: Inputs ============================
 col_theme = st.columns([1])[0]
