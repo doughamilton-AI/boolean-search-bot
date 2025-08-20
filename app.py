@@ -3,7 +3,7 @@
 # streamlit>=1.33
 # openai>=1.85.0
 
-import os
+import os, re
 import json
 from typing import List, Dict, Optional
 import streamlit as st
@@ -100,21 +100,76 @@ def map_family(title: str) -> str:
 # ============================ OpenAI (Structured Output) ============================
 
 def get_openai_client() -> Optional["OpenAI"]:
+    """Create an OpenAI client using key from Streamlit Secrets or env.
+    Supports optional org/project if provided in secrets or env.
+    """
     key = None
+    # Prefer Streamlit secrets
     try:
         if 'OPENAI_API_KEY' in st.secrets:
             key = st.secrets['OPENAI_API_KEY']
     except Exception:
         key = None
+    # Fallback to env var
     if not key:
         key = os.getenv('OPENAI_API_KEY')
     if not key:
         return None
+
+    # Optional org/project
+    org = None
+    proj = None
+    try:
+        org = st.secrets.get('OPENAI_ORG_ID', None) if hasattr(st, 'secrets') else None
+        proj = st.secrets.get('OPENAI_PROJECT', None) if hasattr(st, 'secrets') else None
+    except Exception:
+        org = org or os.getenv('OPENAI_ORG_ID')
+        proj = proj or os.getenv('OPENAI_PROJECT')
+    org = org or os.getenv('OPENAI_ORG_ID')
+    proj = proj or os.getenv('OPENAI_PROJECT')
+
     try:
         from openai import OpenAI  # type: ignore
-        return OpenAI(api_key=key)
+        # Only pass org/project if present (older SDKs accept them as kwargs)
+        kwargs = {'api_key': key}
+        if org:
+            kwargs['organization'] = org
+        if proj:
+            kwargs['project'] = proj
+        return OpenAI(**kwargs)
     except Exception:
         return None
+
+# Helpers to mask keys and sanitize error strings
+
+def _mask_key(k: Optional[str]) -> str:
+    if not k:
+        return 'not found'
+    k = str(k)
+    if len(k) <= 10:
+        return '******'
+    return f"{k[:7]}…{k[-4:]} (len {len(k)})"
+
+
+def _get_key_source_and_preview() -> str:
+    src = 'none'
+    k = None
+    try:
+        if 'OPENAI_API_KEY' in st.secrets:
+            src = 'secrets'
+            k = st.secrets['OPENAI_API_KEY']
+    except Exception:
+        pass
+    if src == 'none' and os.getenv('OPENAI_API_KEY'):
+        src = 'env'
+        k = os.getenv('OPENAI_API_KEY')
+    return f"source={src} • key={_mask_key(k)}"
+
+
+def _sanitize_err(msg: str) -> str:
+    # Mask any embedded keys like sk-xxxxx
+    return re.sub(r"sk-[A-Za-z0-9_\-]+", "sk-****", msg or "")
+
 
 
 def call_openai_pack(client, model: str, job_title: str, job_desc: str, location: str, mode: str) -> Dict:
@@ -214,6 +269,7 @@ if test_ai:
         except Exception:
             ver = 'unknown'
         st.caption(f"OpenAI SDK version: {ver} • Model: {model_choice}")
+        st.caption(_get_key_source_and_preview())
         try:
             ping_schema = {
                 'type': 'object',
@@ -233,7 +289,7 @@ if test_ai:
             _ = json.loads(resp.choices[0].message.content or '{}')
             st.success('✅ AI connection looks good. Model responded.')
         except Exception as e:
-            st.error(f"❌ AI test failed: {type(e).__name__}: {e}")
+            st.error(f"❌ AI test failed: {type(e).__name__}: {_sanitize_err(str(e))}")
 
 if build and (title_in or '').strip():
     fam = map_family(title_in)
@@ -308,4 +364,3 @@ if build and (title_in or '').strip():
     st.download_button('Download pack (.txt)', data=pack_text, file_name='sourcing_pack.txt')
 else:
     st.info('Enter a role title, optionally paste a JD, pick a model, then click Build with AI.')
-
