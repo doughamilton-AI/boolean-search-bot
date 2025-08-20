@@ -345,6 +345,29 @@ def _init_from_query_params():
 
 # ============================= Helpers =============================
 
+def _sanitize_for_linkedin(s: str) -> str:
+    """Make a boolean string safer for LinkedIn's URL search box."""
+    s = (s or "").replace("
+", " ").replace("
+", " ")
+    s = s.replace("—", "-").replace("–", "-").replace("“", '"').replace("”", '"').replace("’", "'")
+    s = " ".join(s.split())  # collapse whitespace
+    return s
+
+
+def _preview_variants_for_linkedin(titles: List[str], must: List[str], nice: List[str], li_keywords: str):
+    """Return (keywords_only_no_not, titles_plus_keywords_lite, full_boolean)."""
+    core_part = li_keywords.split(" NOT ")[0].strip() if " NOT " in li_keywords else li_keywords
+    k_only = _sanitize_for_linkedin(core_part)
+    # small, safe title+keyword mix for preview volume sniff
+    t_lite = or_group(titles[:5])
+    m_lite = or_group((must + nice)[:6])
+    tk_lite = _sanitize_for_linkedin(f"{t_lite} AND {m_lite}") if t_lite and m_lite else k_only
+    k_full = _sanitize_for_linkedin(li_keywords)
+    return k_only, tk_lite, k_full
+
+
+
 def map_title_to_category(title: str) -> str:
     t = (title or "").lower()
     # Strong keyword checks
@@ -869,14 +892,21 @@ Skills (All CSV):
 
         # ---- 🔗 Quick Actions ----
         st.markdown("### 🔗 Quick Actions")
+        # Build safer preview variants for LinkedIn
+        k_only, tk_lite, k_full = _preview_variants_for_linkedin(titles, must, nice, li_keywords)
+        ln_base = "https://www.linkedin.com/search/results/people/?keywords="
         try:
-            ln_preview_url = "https://www.linkedin.com/search/results/people/?keywords=" + quote_plus(li_keywords)
             if hasattr(st, "link_button"):
-                st.link_button("🔎 Preview on LinkedIn", ln_preview_url)
+                st.link_button("🔎 Preview: Keywords (no NOT) — safe", ln_base + quote_plus(k_only))
+                st.link_button("🔎 Preview: Titles + Keywords (lite)", ln_base + quote_plus(tk_lite))
+                st.link_button("🔎 Preview: Full Boolean", ln_base + quote_plus(k_full))
             else:
-                st.markdown(f"[🔎 Preview on LinkedIn]({ln_preview_url})")
+                st.markdown(f"[🔎 Preview: Keywords (no NOT) — safe]({ln_base + quote_plus(k_only)})  ")
+                st.markdown(f"[🔎 Preview: Titles + Keywords (lite)]({ln_base + quote_plus(tk_lite)})  ")
+                st.markdown(f"[🔎 Preview: Full Boolean]({ln_base + quote_plus(k_full)})")
         except Exception:
             pass
+        # share link builder (unchanged)
         params = {
             "role": st.session_state.get("any_title",""),
             "cat": cat,
@@ -904,6 +934,8 @@ Skills (All CSV):
           </script>
         """
         components.html(share_html, height=170)
+        # store a light preview for any sticky bar usage
+        ln_light_q = quote_plus(k_only)
 
         # ---- 🧪 String Health ----
         def _paren_ok(s: str) -> bool:
