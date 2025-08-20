@@ -229,54 +229,54 @@ DENSITY = {
 def inject_css(theme_name: str, density: str) -> None:
     t = THEMES.get(theme_name, THEMES["Electric"])
     d = DENSITY.get(density, DENSITY["Cozy"])
-    css = (
-        "<style>"
-        ":root {"
-        "--grad: " + t["grad"] + ";"
-        "--bg: " + t["bg"] + ";"
-        "--card: " + t["card"] + ";"
-        "--text: " + t["text"] + ";"
-        "--muted: " + t["muted"] + ";"
-        "--ring: " + t["ring"] + ";"
-        "--btn: " + t["button"] + ";"
-        "--gap: " + d["gap"] + ";"
-        "--pad: " + d["pad"] + ";"
-        "--radius: " + d["radius"] + ";"
-        "--codefs: " + d["codefs"] + ";"
-        "--btnpad: " + d["btnpad"] + ";"
-        "}"
-        ".stApp, [data-testid='stAppViewContainer'] {background: var(--bg); color: var(--text);}"
-        "[data-testid='stHeader'] {background: transparent;}"
-        /* Inputs */
+    parts = [
+        "<style>",
+        ":root {",
+        "--grad: " + t["grad"] + ";",
+        "--bg: " + t["bg"] + ";",
+        "--card: " + t["card"] + ";",
+        "--text: " + t["text"] + ";",
+        "--muted: " + t["muted"] + ";",
+        "--ring: " + t["ring"] + ";",
+        "--btn: " + t["button"] + ";",
+        "--gap: " + d["gap"] + ";",
+        "--pad: " + d["pad"] + ";",
+        "--radius: " + d["radius"] + ";",
+        "--codefs: " + d["codefs"] + ";",
+        "--btnpad: " + d["btnpad"] + ";",
+        "}",
+        ".stApp, [data-testid='stAppViewContainer'] {background: var(--bg); color: var(--text);}",
+        "[data-testid='stHeader'] {background: transparent;}",
+        "/* Inputs */",
         "input[type='text'], textarea {background: var(--card) !important; color: var(--text) !important; "
-        "border: 1px solid rgba(255,255,255,.07) !important; border-radius: var(--radius) !important;}"
+        "border: 1px solid rgba(255,255,255,.07) !important; border-radius: var(--radius) !important;}",
         "input[type='text']:focus, textarea:focus {outline: none !important; border-color: var(--ring) !important; "
-        "box-shadow: 0 0 0 3px rgba(99,102,241,.18) !important;}"
-        /* Buttons */
+        "box-shadow: 0 0 0 3px rgba(99,102,241,.18) !important;}",
+        "/* Buttons */",
         ".stButton>button, .stDownloadButton>button {"
         "background: var(--btn); color: #0B1021; font-weight: 700; border: none; "
-        "padding: var(--btnpad); border-radius: 999px; box-shadow: 0 8px 24px rgba(0,0,0,.25);}"
-        ".stButton>button:hover, .stDownloadButton>button:hover {filter: brightness(1.05);}"
-        ".stButton>button:focus {outline: none; box-shadow: 0 0 0 3px rgba(99,102,241,.25);}"
-        /* Code blocks */
-        "pre, code {font-size: var(--codefs) !important;}"
-        /* Cards & Grid */
-        ".grid {display: grid; gap: var(--gap); grid-template-columns: repeat(12, 1fr);}"
+        "padding: var(--btnpad); border-radius: 999px; box-shadow: 0 8px 24px rgba(0,0,0,.25);}",
+        ".stButton>button:hover, .stDownloadButton>button:hover {filter: brightness(1.05);}",
+        ".stButton>button:focus {outline: none; box-shadow: 0 0 0 3px rgba(99,102,241,.25);}",
+        "/* Code blocks */",
+        "pre, code {font-size: var(--codefs) !important;}",
+        "/* Cards & Grid */",
+        ".grid {display: grid; gap: var(--gap); grid-template-columns: repeat(12, 1fr);}",
         ".card {grid-column: span 6; background: var(--card); border: 1px solid rgba(255,255,255,.06); "
-        "border-radius: var(--radius); padding: var(--pad); box-shadow: 0 10px 30px rgba(0,0,0,.35);}"
+        "border-radius: var(--radius); padding: var(--pad); box-shadow: 0 10px 30px rgba(0,0,0,.35);}",
         ".hero {padding: var(--pad); border-radius: var(--radius); background: var(--card); "
-        "border: 1px solid rgba(255,255,255,.06); box-shadow: 0 10px 30px rgba(0,0,0,.35); margin-bottom: var(--gap);}"
+        "border: 1px solid rgba(255,255,255,.06); box-shadow: 0 10px 30px rgba(0,0,0,.35); margin-bottom: var(--gap);}",
         ".hero h1 {margin: 0; font-size: 28px; font-weight: 800; background: var(--grad); "
-        "-webkit-background-clip: text; background-clip: text; color: transparent;}"
-        ".chips {display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px;}"
+        "-webkit-background-clip: text; background-clip: text; color: transparent;}",
+        ".chips {display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px;}",
         ".chip {padding: 6px 10px; border-radius: 999px; font-size: 12px; color: var(--text); "
-        "background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08);}"
-        ".hint {font-size: 12px; color: var(--muted); margin-top: 4px;}"
-        ".divider {height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent); margin: 8px 0;}"
-        ".pill {display:inline-block;padding:4px 10px;border-radius:999px;background: var(--grad); color:#0b0f19; font-weight:700; font-size:12px;}"
-        "</style>"
-    )
-    st.markdown(css, unsafe_allow_html=True)
+        "background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08);}",
+        ".hint {font-size: 12px; color: var(--muted); margin-top: 4px;}",
+        ".divider {height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent); margin: 8px 0;}",
+        ".pill {display:inline-block;padding:4px 10px;border-radius:999px;background: var(--grad); color:#0b0f19; font-weight:700; font-size:12px;}",
+        "</style>",
+    ]
+    st.markdown("".join(parts), unsafe_allow_html=True)
 
 
 def hero(job_title: str, category: str, location: str) -> None:
