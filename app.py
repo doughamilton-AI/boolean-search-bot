@@ -408,8 +408,8 @@ if st.session_state.get("built"):
     # Health & confetti
     issues = string_health_report(li_keywords)
     if issues:
-        st.warning("
-".join(["• " + x for x in issues]))
+        joiner = chr(10)
+        st.warning(joiner.join(["• " + x for x in issues]))
     else:
         st.success("✅ String looks healthy and ready to paste into LinkedIn.")
         st.balloons()
