@@ -570,10 +570,7 @@ if st.session_state.get("built"):
     # Health + grade + quick fix
     issues = string_health_report(li_keywords)
     grade = string_health_grade(li_keywords)
-    if issues:
-        st.warning("Health: " + grade + "
-" + "
-".join(["• " + x for x in issues]))
+    if issues:st.warning("Health: " + grade + "" + "".join(["• " + x for x in issues]))
         if st.button("🧹 Trim & Dedupe (suggested)"):
             must_k = canonicalize(must)[:12]
             nice_k = canonicalize(nice)[:8]
