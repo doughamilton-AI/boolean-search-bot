@@ -1,12 +1,9 @@
-# AI Sourcing Assistant — Stable Minimal Build (Working Baseline)
-# Focus: LinkedIn‑ready Boolean outputs (Title Current/Past, Keywords, Skills)
-# Safe, minimal code (no custom HTML/JS) with JD auto‑extract and inline editors.
-
 import re
 from typing import List
 import streamlit as st
 
 st.set_page_config(page_title="AI Sourcing Assistant", layout="wide")
+
 
 # ---------------------------- Small Role Library (extensible) ----------------------------
 ROLE_LIB = {
@@ -43,6 +40,7 @@ SMART_NOT = [
     "customer support", "help desk", "desktop support", "qa tester"
 ]
 
+
 # ---------------------------- Helpers ----------------------------
 def unique_preserve(seq: List[str]) -> List[str]:
     seen, out = set(), []
@@ -78,8 +76,8 @@ def map_title_to_category(title: str) -> str:
         return "sre"
     # ML next
     ml_terms = [
-        "machine learning", "ml engineer", "applied scientist", "data scientist", "ai engineer",
-        " ml ", "ml-", "ml/"
+        "machine learning", "ml engineer", "applied scientist",
+        "data scientist", "ai engineer", " ml ", "ml-", "ml/"
     ]
     if any(t in s for t in ml_terms):
         return "ml"
@@ -87,11 +85,13 @@ def map_title_to_category(title: str) -> str:
 
 
 def expand_titles(base_titles: List[str], cat: str) -> List[str]:
-    extra = []
+    extra: List[str] = []
     if cat == "swe":
-        extra = ["Software Eng", "Software Dev", "Full-Stack Engineer", "Backend Developer", "Frontend Developer"]
+        extra = ["Software Eng", "Software Dev", "Full-Stack Engineer",
+                 "Backend Developer", "Frontend Developer"]
     elif cat == "ml":
-        extra = ["ML Eng", "Machine Learning Specialist", "Applied ML Engineer", "ML Research Engineer"]
+        extra = ["ML Eng", "Machine Learning Specialist",
+                 "Applied ML Engineer", "ML Research Engineer"]
     elif cat == "sre":
         extra = ["Reliability Eng", "DevOps SRE", "Platform SRE", "Production Engineer"]
     return unique_preserve(base_titles + extra)
@@ -108,7 +108,8 @@ def build_keywords(must: List[str], nice: List[str], nots: List[str]) -> str:
 
 
 def jd_extract(jd_text: str):
-    """Minimal extractor: count occurrences of known skills from ROLE_LIB across all roles.
+    """
+    Minimal extractor: count occurrences of known skills from ROLE_LIB across all roles.
     Returns (must_ex, nice_ex, auto_not).
     """
     jd = (jd_text or "").lower()
@@ -130,7 +131,7 @@ def jd_extract(jd_text: str):
 
 
 def string_health_report(s: str) -> List[str]:
-    issues = []
+    issues: List[str] = []
     if not s:
         return ["Keywords are empty — add must/nice skills."]
     if len(s) > 900:
@@ -151,6 +152,7 @@ def string_health_report(s: str) -> List[str]:
     if depth != 0 or not ok:
         issues.append("Unbalanced parentheses; copy fresh strings or simplify.")
     return issues
+
 
 # ---------------------------- UI ----------------------------
 st.title("🎯 AI Sourcing Assistant")
@@ -185,8 +187,7 @@ if st.session_state.get("built"):
     st.subheader("✏️ Customize")
     c1, c2 = st.columns([1, 1])
     with c1:
-        titles_default = "
-".join(titles)
+        titles_default = "\n".join(titles)
         titles_text = st.text_area("Titles (one per line)", value=titles_default, height=150)
     with c2:
         must_default = ", ".join(must)
@@ -237,10 +238,10 @@ if st.session_state.get("built"):
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("**Title (Current)** — Paste into: People → Title (Current)")
-        st.code(li_title_current or "(\"Software Engineer\")", language="text")
+        st.code(li_title_current or '("Software Engineer")', language="text")
     with col2:
         st.markdown("**Title (Past)** — Paste into: People → Title (Past)")
-        st.code(li_title_past or "(\"Software Engineer\")", language="text")
+        st.code(li_title_past or '("Software Engineer")', language="text")
 
     st.markdown("**Keywords (Boolean)** — Paste into: People → Keywords")
     st.code(li_keywords or "(python OR java)", language="text")
@@ -249,16 +250,15 @@ if st.session_state.get("built"):
     st.code(skills_all_csv or "python, java", language="text")
 
     # String health
-    issues = string_health_report(li_keywords)
+    issues = string_health_report(s=li_keywords)
     if issues:
-        st.warning("
-".join(["• " + x for x in issues]))
+        st.warning("\n".join(["• " + x for x in issues]))
     else:
         st.success("Strings look healthy and ready to paste into LinkedIn.")
 
     # Export
     st.subheader("⬇️ Export")
-    lines = []
+    lines: List[str] = []
     lines.append("ROLE: " + st.session_state.get("role_title", ""))
     lines.append("LOCATION: " + (st.session_state.get("location") or ""))
     lines.append("")
@@ -273,8 +273,7 @@ if st.session_state.get("built"):
     lines.append("")
     lines.append("SKILLS (CSV):")
     lines.append(skills_all_csv)
-    pack_text = "
-".join(lines)
+    pack_text = "\n".join(lines)
     st.download_button("Download pack (.txt)", data=pack_text, file_name="sourcing_pack.txt")
 
 else:
