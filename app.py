@@ -1,4 +1,4 @@
-# app.py — AI Sourcing Assistant (Bright UI, No External AI) + Outcome Tracking
+# app.py — AI Sourcing Assistant (Bright UI, Outcome Tracking, No External AI)
 # Requirements (requirements.txt):
 # streamlit>=1.33
 
@@ -647,6 +647,28 @@ if st.session_state.get("built"):
         notes = st.text_area("Notes (optional)", placeholder="What worked? What was noisy?")
         submitted = st.form_submit_button("Save feedback")
 
+    def load_feedback() -> List[dict]:
+        if "feedback_cache" in st.session_state:
+            return st.session_state["feedback_cache"]
+        recs: List[dict] = []
+        if os.path.exists("feedback.json"):
+            try:
+                with open("feedback.json", "r", encoding="utf-8") as f:
+                    recs = json.load(f)
+            except Exception:
+                recs = []
+        st.session_state["feedback_cache"] = recs
+        return recs
+
+    def save_feedback(recs: List[dict]) -> bool:
+        st.session_state["feedback_cache"] = recs
+        try:
+            with open("feedback.json", "w", encoding="utf-8") as f:
+                json.dump(recs, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception:
+            return False
+
     if submitted:
         rec = {
             "timestamp": datetime.utcnow().isoformat() + "Z",
@@ -662,7 +684,6 @@ if st.session_state.get("built"):
             "results": int(results_found),
             "time": time_spent,
             "notes": notes,
-            # snapshot of strings
             "title_current": li_title_current,
             "title_past": li_title_past,
             "keywords": li_keywords,
@@ -678,7 +699,6 @@ if st.session_state.get("built"):
 
     # Leaderboard (best performing)
     recs = load_feedback()
-    # Aggregate
     agg: Dict[str, dict] = {}
     for r in recs:
         sg = r.get("sig")
@@ -701,7 +721,7 @@ if st.session_state.get("built"):
         ts = r.get("timestamp", "")
         if ts and ts > a.get("last", ""):
             a["last"] = ts
-    # Compute score: avg results + thumbs factor
+
     rows = []
     for sg, a in agg.items():
         avg_results = a["results"] / max(1, a["count"])
@@ -726,16 +746,14 @@ if st.session_state.get("built"):
                 st.button("Copy Companies", key=f"copy_co_{r['sig']}", on_click=lambda s=r: st.session_state.update({"_copy": r.get("companies","")}))
             with cc5:
                 if st.button("Load to editors", key=f"load_{r['sig']}"):
-                    # Load strings into current session so user can tweak
                     st.session_state["titles"] = [t.strip().strip('"') for t in (r.get("title_current",""))[1:-1].split(" OR ") if t.strip()]
                     st.session_state["must"] = [s.strip() for s in skills_all_csv.split(",") if s.strip()]
-                    st.session_state["nice"] = []  # keep simple; user can add
+                    st.session_state["nice"] = []
                     st.info("Loaded. Scroll up to Customize to review and click Apply changes.")
             st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
     else:
         st.caption("No feedback yet — save a few outcomes to see best packs here.")
 
-    # Feedback export
     if recs:
         st.download_button("⬇️ Download feedback JSON", data=json.dumps(recs, ensure_ascii=False, indent=2), file_name="feedback.json")
 
