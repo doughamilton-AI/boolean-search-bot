@@ -252,10 +252,10 @@ def apply_seniority(titles: List[str], level: str) -> List[str]:
 SCHEMA_KEYS = ["titles", "skills", "not_terms", "company_or", "rationales"]
 
 def call_llm(payload: Dict) -> Dict:
-    '''OpenAI-backed implementation using Structured Outputs (JSON Schema).
+    """OpenAI-backed implementation using Structured Outputs (JSON Schema).
     Returns {} to trigger fallback if key/module unavailable or parsing fails.
-    '''
-    key = os.getenv('OPENAI_API_KEY')
+    """
+    key = os.getenv("OPENAI_API_KEY")
     if not key:
         return {}
     try:
@@ -267,103 +267,99 @@ def call_llm(payload: Dict) -> Dict:
 
     # JSON Schema the model must follow (strict)
     schema: Dict = {
-        'type': 'object',
-        'properties': {
-            'role_family': {'type': 'string', 'enum': ['swe','ml','sre','data','security','mobile']},
-            'titles': {
-                'type': 'object',
-                'properties': {
-                    'must':   {'type': 'array', 'items': {'type': 'string'}},
-                    'variants':{'type': 'array', 'items': {'type': 'string'}}
+        "type": "object",
+        "properties": {
+            "role_family": {"type": "string", "enum": ["swe","ml","sre","data","security","mobile"]},
+            "titles": {
+                "type": "object",
+                "properties": {
+                    "must":   {"type": "array", "items": {"type": "string"}},
+                    "variants":{"type": "array", "items": {"type": "string"}}
                 },
-                'required': ['must','variants'],
-                'additionalProperties': False
+                "required": ["must","variants"],
+                "additionalProperties": False
             },
-            'skills': {
-                'type': 'object',
-                'properties': {
-                    'must': {'type': 'array', 'items': {'type': 'string'}},
-                    'nice': {'type': 'array', 'items': {'type': 'string'}}
+            "skills": {
+                "type": "object",
+                "properties": {
+                    "must": {"type": "array", "items": {"type": "string"}},
+                    "nice": {"type": "array", "items": {"type": "string"}}
                 },
-                'required': ['must','nice'],
-                'additionalProperties': False
+                "required": ["must","nice"],
+                "additionalProperties": False
             },
-            'not_terms':  {'type': 'array', 'items': {'type': 'string'}},
-            'company_or': {'type': 'array', 'items': {'type': 'string'}},
-            'rationales': {
-                'type': 'object',
-                'properties': {
-                    'titles': {'type': 'string'},
-                    'skills': {'type': 'string'},
-                    'not_terms': {'type': 'string'},
-                    'company_or': {'type': 'string'}
+            "not_terms":  {"type": "array", "items": {"type": "string"}},
+            "company_or": {"type": "array", "items": {"type": "string"}},
+            "rationales": {
+                "type": "object",
+                "properties": {
+                    "titles": {"type": "string"},
+                    "skills": {"type": "string"},
+                    "not_terms": {"type": "string"},
+                    "company_or": {"type": "string"}
                 },
-                'additionalProperties': False
+                "additionalProperties": False
             }
         },
-        'required': ['titles','skills','not_terms','company_or'],
-        'additionalProperties': False
+        "required": ["titles","skills","not_terms","company_or"],
+        "additionalProperties": False
     }
 
-    # Build prompts using ASCII-safe strings
+    # Build prompts using ASCII-safe strings (double quotes) and a safe joiner
     sys_lines = [
-        'You are an expert technical sourcer for top tech.',
-        'Return JSON ONLY that matches the provided schema exactly.',
-        'Prefer canonical skills and realistic titles from the ontology.',
-        'Use synonyms map to normalize tokens (for example: golang->go, k8s->kubernetes).',
-        'If uncertain, bias toward precision over coverage.'
+        "You are an expert technical sourcer for top tech.",
+        "Return JSON ONLY that matches the provided schema exactly.",
+        "Prefer canonical skills and realistic titles from the ontology.",
+        "Use synonyms map to normalize tokens (for example: golang->go, k8s->kubernetes).",
+        "If uncertain, bias toward precision over coverage."
     ]
-    system_prompt = '
-'.join(sys_lines)
+    joiner = chr(10)
+    system_prompt = joiner.join(sys_lines)
 
-    mode = payload.get('mode', 'coverage')
-    jt = payload.get('job_title', '') or ''
-    jd = payload.get('job_description', '') or ''
-    loc = payload.get('location', '') or ''
+    mode = payload.get("mode", "coverage")
+    jt = payload.get("job_title", "") or ""
+    jd = payload.get("job_description", "") or ""
+    loc = payload.get("location", "") or ""
 
     context_obj = {
-        'ontology': payload.get('ontology', {}),
-        'synonyms': payload.get('synonyms', {}),
-        'company_segments': payload.get('company_segments', {}),
-        'caps': {'mode': mode, 'titles': 22 if mode=='coverage' else 10}
+        "ontology": payload.get("ontology", {}),
+        "synonyms": payload.get("synonyms", {}),
+        "company_segments": payload.get("company_segments", {}),
+        "caps": {"mode": mode, "titles": 22 if mode=="coverage" else 10}
     }
     user_lines = [
-        'JOB_TITLE: ' + jt,
-        'LOCATION: ' + loc,
-        'MODE: ' + mode,
-        'JD:
-' + (jd if jd else '(none)') + '
-',
-        'CONTEXT:
-' + json.dumps(context_obj, ensure_ascii=True)
+        "JOB_TITLE: " + jt,
+        "LOCATION: " + loc,
+        "MODE: " + mode,
+        "JD:" + joiner + (jd if jd else "(none)"),
+        "CONTEXT:" + joiner + json.dumps(context_obj, ensure_ascii=True)
     ]
-    user_prompt = '
-'.join(user_lines)
+    user_prompt = joiner.join(user_lines)
 
     try:
         completion = client.chat.completions.create(
-            model='gpt-4o-mini',
-            temperature=0.2 if mode == 'precision' else 0.3,
+            model="gpt-4o-mini",
+            temperature=0.2 if mode == "precision" else 0.3,
             messages=[
-                {'role': 'system', 'content': system_prompt},
-                {'role': 'user', 'content': user_prompt},
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ],
             response_format={
-                'type': 'json_schema',
-                'json_schema': {
-                    'name': 'SourcingPack',
-                    'schema': schema,
-                    'strict': True
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "SourcingPack",
+                    "schema": schema,
+                    "strict": True
                 }
             },
         )
-        content = completion.choices[0].message.content or '{}'
+        content = completion.choices[0].message.content or "{}"
         return json.loads(content)
     except Exception:
         return {}
 
 
-def build_ai_pack(job_title: str, jd_text: str, location: str, mode: str) -> Dict | None:(job_title: str, jd_text: str, location: str, mode: str) -> Dict | None:(job_title: str, jd_text: str, location: str, mode: str) -> Dict | None:
+def build_ai_pack(job_title: str, jd_text: str, location: str, mode: str) -> Dict | None:
     payload = {
         "job_title": job_title,
         "job_description": jd_text or "",
