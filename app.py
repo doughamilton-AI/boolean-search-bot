@@ -1,15 +1,22 @@
-# app.py — AI Sourcing Assistant (Bright UI, No External AI)
+# app.py — AI Sourcing Assistant (Bright UI, AI-enabled)
 # Requirements (requirements.txt):
 # streamlit>=1.33
+# openai>=1.35.0
 
 import json
+import os
 import re
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Any
 import streamlit as st
+
+try:
+    from openai import OpenAI  # Official OpenAI SDK (v1+)
+except Exception:  # Optional import; app can still run without AI
+    OpenAI = None
 
 st.set_page_config(page_title="AI Sourcing Assistant", layout="wide")
 
-# ============================ Role Library (extensible) ============================
+# ============================ Role Library (fallback; used when AI is off/unavailable) ============================
 ROLE_LIB: Dict[str, Dict[str, List[str]]] = {
     "swe": {
         "titles": [
@@ -44,7 +51,7 @@ SMART_NOT = [
     "customer support", "help desk", "desktop support", "qa tester", "graphic designer"
 ]
 
-# ============================ Company Sets (top-tech + metros, editable) ============================
+# ============================ Company Sets (seed lists; AI can add more) ============================
 COMPANY_SETS: Dict[str, List[str]] = {
     "faang_plus": [
         "Google", "Meta", "Apple", "Amazon", "Netflix", "Microsoft",
@@ -284,6 +291,117 @@ def apply_seniority(titles: List[str], level: str) -> List[str]:
             res.append(x)
     return res[:24]
 
+# ============================ AI Layer ============================
+MODEL_DEFAULT = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # configurable
+
+@st.cache_data(show_spinner=False)
+def _ai_cached(title: str, location: str, jd_text: str, level: str, env: str, size: str, model: str) -> Dict[str, Any]:
+    """Cached wrapper so repeated edits don't re-call the API."""
+    payload = ai_generate_role_pack(title, location, jd_text, level, env, size, model)
+    return payload or {}
+
+
+def get_openai_client():
+    if OpenAI is None:
+        return None, "OpenAI SDK not installed. Add `openai` to requirements."
+    api_key = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY", None)
+    if not api_key:
+        return None, "Missing OPENAI_API_KEY (env var or st.secrets)."
+    try:
+        client = OpenAI(api_key=api_key)
+        return client, None
+    except Exception as e:
+        return None, f"OpenAI client error: {e}"
+
+
+def parse_json_safely(text: str) -> Dict[str, Any]:
+    if not text:
+        return {}
+    m = re.search(r"\{[\s\S]*\}", text)
+    raw = m.group(0) if m else text
+    try:
+        return json.loads(raw)
+    except Exception:
+        # last resort: remove trailing commas
+        raw2 = re.sub(r",\s*([}\]])", r"\1", raw)
+        try:
+            return json.loads(raw2)
+        except Exception:
+            return {}
+
+
+def call_llm_json(messages: List[Dict[str, str]], model: str = MODEL_DEFAULT) -> Dict[str, Any]:
+    client, err = get_openai_client()
+    if err:
+        st.info(err)
+        return {}
+    # Try Chat Completions with JSON mode; fallback to Responses API
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            temperature=0.2,
+            response_format={"type": "json_object"},
+            messages=[{"role": m.get("role", "user"), "content": m.get("content", "")} for m in messages],
+        )
+        txt = resp.choices[0].message.content
+        return parse_json_safely(txt)
+    except Exception:
+        pass
+    # Responses API fallback
+    try:
+        # The Responses API accepts `input` with role messages as a list
+        resp2 = client.responses.create(
+            model=model,
+            temperature=0.2,
+            response_format={"type": "json_object"},
+            input=[{"role": m.get("role", "user"), "content": m.get("content", "")} for m in messages],
+        )
+        # Some SDK versions expose output_text; otherwise extract from content parts
+        txt = getattr(resp2, "output_text", None)
+        if not txt:
+            # Fallback extraction
+            try:
+                parts = resp2.output[0].content  # type: ignore[attr-defined]
+                txt = "".join([p.text for p in parts if getattr(p, "type", "") == "output_text"])  # best-effort
+            except Exception:
+                txt = None
+        return parse_json_safely(txt or "")
+    except Exception as e:
+        st.error(f"AI request failed: {e}")
+        return {}
+
+
+def ai_generate_role_pack(title: str, location: str, jd_text: str, level: str, env: str, size: str, model: str) -> Dict[str, Any]:
+    system = (
+        "You are a senior technical sourcer. Given a role title and optional JD text, "
+        "output a compact JSON object to drive boolean sourcing. Focus on precision."
+    )
+    user = f"""
+Title: {title}
+Location: {location or ""}
+Seniority: {level}
+Work setting: {env}
+Company size: {size}
+
+Job description (optional):\n{(jd_text or '').strip()[:8000]}
+
+Return STRICT JSON with keys:
+- role_category: one of [eng, data, product, design, marketing, sales, ops, finance, hr, legal, it, healthcare, hardware, security, other]
+- titles: array of 10-24 synonyms/nearby titles (include seniority variants relevant to Seniority)
+- must_have: array of 6-12 anchor skills/keywords (technology or function-specific)
+- nice_to_have: array of 6-10 optional skills
+- negatives: array of 6-12 NOT terms (avoid overlap with target function)
+- qualifiers: array of optional keywords like industry or environment (e.g., remote, enterprise)
+- target_companies: array of 15-40 companies relevant to this role (mix of leaders + adjacent)
+- notes: short string with 2–3 tips on narrowing the search
+"""
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+    data = call_llm_json(messages, model=model)
+    return data
+
 # ============================ Bright Theme CSS ============================
 THEMES: Dict[str, Dict[str, str]] = {
     "Sky":   {"grad": "linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%)", "bg": "#F8FAFC", "card": "#FFFFFF", "text": "#0F172A", "muted": "#475569", "ring": "#3B82F6", "button": "#2563EB"},
@@ -375,7 +493,7 @@ def hero(job_title: str, category: str, location: str) -> None:
     if job_title:
         chips.append("<span class='chip'>🎯 " + job_title + "</span>")
     if category:
-        chips.append("<span class='chip'>🧠 " + category.upper() + "</span>")
+        chips.append("<span class='chip'>🧠 " + (category.upper()) + "</span>")
     if location:
         chips.append("<span class='chip'>📍 " + location + "</span>")
     if chips:
@@ -439,24 +557,64 @@ with col4:
         metro_default = "Any"
     metro = st.selectbox("Metro focus", list(METRO_COMPANIES.keys()), index=list(METRO_COMPANIES.keys()).index(metro_default))
 
+# ============================ AI Controls ============================
+ai_expander = st.expander("🤖 AI Assistance (optional)", expanded=True)
+with ai_expander:
+    st.caption("Set an API key in env `OPENAI_API_KEY` or Streamlit `st.secrets`. Model can be overridden with env `OPENAI_MODEL`.")
+    use_ai = st.checkbox("Enable AI for any role/title", value=True)
+    model_name = st.text_input("Model", value=MODEL_DEFAULT)
+    jd_helper = st.text_area("Paste JD (optional) for better suggestions", height=160, key="jd_text_global")
+    ai_ping = st.button("Test AI connection")
+    if ai_ping:
+        client, err = get_openai_client()
+        if err:
+            st.error(err)
+        else:
+            st.success("OpenAI client ready.")
+
 # Build
 if st.button("✨ Build sourcing pack") and (job_title or "").strip():
     qp_set(**{"title": job_title, "loc": location, "level": level, "env": env, "size": size, "metro": metro, "theme": theme_choice, "not": st.session_state.get("extra_not", "")})
     st.session_state["built"] = True
     st.session_state["role_title"] = job_title
     st.session_state["location"] = location
-    st.session_state["category"] = map_title_to_category(job_title)
 
-    R = ROLE_LIB[st.session_state["category"]]
-    titles_seed = expand_titles(R["titles"], st.session_state["category"])
+    # Default seeds (fallback)
+    heuristic_cat = map_title_to_category(job_title)
+    R = ROLE_LIB[heuristic_cat]
+    titles_seed = expand_titles(R["titles"], heuristic_cat)
     must_seed = list(R["must"])
     nice_seed = list(R["nice"])
     not_seed = list(SMART_NOT)
+    companies_seed: List[str] = []
+
+    # AI augmentation (any role)
+    if use_ai and job_title.strip():
+        with st.spinner("Calling AI for role intelligence…"):
+            ai = _ai_cached(job_title.strip(), location.strip(), st.session_state.get("jd_text_global", ""), level, env, size, model_name)
+        if ai:
+            st.session_state["category"] = (ai.get("role_category") or heuristic_cat or "other")
+            # Titles / skills / negatives / qualifiers
+            titles_seed = unique_preserve((ai.get("titles") or []) + titles_seed)
+            must_seed   = unique_preserve(ai.get("must_have") or must_seed)
+            nice_seed   = unique_preserve(ai.get("nice_to_have") or nice_seed)
+            not_seed    = unique_preserve((ai.get("negatives") or []) + not_seed)
+            # Companies
+            companies_seed = unique_preserve((ai.get("target_companies") or []) + METRO_COMPANIES.get(metro, []))
+            # Helper notes
+            st.session_state["ai_notes"] = ai.get("notes", "")
+            st.toast("AI suggestions applied.")
+        else:
+            st.session_state["category"] = heuristic_cat
+            st.info("AI unavailable; using fallback library.")
+    else:
+        st.session_state["category"] = heuristic_cat
 
     st.session_state["titles"] = titles_seed
     st.session_state["must"] = must_seed
     st.session_state["nice"] = nice_seed
     st.session_state["not_terms"] = not_seed
+    st.session_state["companies_seed"] = companies_seed
 
 category = st.session_state.get("category", "")
 hero(st.session_state.get("role_title", ""), category, st.session_state.get("location", ""))
@@ -492,9 +650,9 @@ if st.session_state.get("built"):
         must_text = st.text_area("Must-have skills (comma-separated)", value=", ".join(must), height=120, key="must_text")
         nice_text = st.text_area("Nice-to-have skills (comma-separated)", value=", ".join(nice), height=120, key="nice_text")
 
-    # JD extraction (optional)
-    with st.expander("📄 Paste JD → Auto-extract (optional)"):
-        jd = st.text_area("Paste JD (optional)", height=160, key="jd_text")
+    # JD extraction (optional, local)
+    with st.expander("📄 Paste JD → Auto-extract using keyword heuristics (optional)"):
+        jd = st.text_area("Paste JD (optional)", height=160, key="jd_text_local")
         if st.button("Extract from JD"):
             m_ex, n_ex, n_not = jd_extract(jd)
             applied = False
@@ -520,7 +678,7 @@ if st.session_state.get("built"):
 
     # Companies
     st.subheader("🏢 Company Targets — common employers for this role")
-    group_order = ROLE_TO_GROUPS.get(category or "swe", ["faang_plus"])
+    group_order = ROLE_TO_GROUPS.get((category or "swe"), ["faang_plus"])
     default_sel = group_order[:3] if len(group_order) >= 3 else group_order
     selected_groups = st.multiselect("Segments", options=group_order, default=default_sel, help="Choose segments to populate the company list.")
     custom_companies = st.text_area("Add companies (comma-separated)", placeholder="e.g., Two Sigma, Bloomberg, Robinhood", height=80)
@@ -529,6 +687,7 @@ if st.session_state.get("built"):
     for g in selected_groups:
         companies.extend(COMPANY_SETS.get(g, []))
     companies.extend(METRO_COMPANIES.get(metro, []))
+    companies.extend(st.session_state.get("companies_seed", []))
     companies.extend([c.strip() for c in (custom_companies or "").split(",") if c.strip()])
     companies = unique_preserve(companies)
 
@@ -547,7 +706,6 @@ if st.session_state.get("built"):
             qual.append("scale-up")
         elif size == "Enterprise":
             qual.append("enterprise")
-        # performance modifiers (optional flavor)
         qual += ["highly scalable", "high throughput"]
 
     # Build NOT list (IC-only optional)
@@ -559,10 +717,7 @@ if st.session_state.get("built"):
     # Build strings
     li_title_current = or_group(titles)
     li_title_past = or_group(titles[: min(20, len(titles))])
-    if use_two_tier:
-        li_keywords = build_keywords_two_tier(must, nice, all_not, qualifiers=qual, min_must=min_must)
-    else:
-        li_keywords = build_keywords(must, nice, all_not, qualifiers=qual)
+    li_keywords = build_keywords_two_tier(must, nice, all_not, qualifiers=qual, min_must=2) if use_two_tier else build_keywords(must, nice, all_not, qualifiers=qual)
     companies_or = or_group(companies)
     skills_all_csv = ", ".join(unique_preserve(must + nice))
 
@@ -576,7 +731,7 @@ if st.session_state.get("built"):
             nice_k = canonicalize(nice)[:8]
             all_not_k = canonicalize(all_not)[:10]
             if use_two_tier:
-                li_keywords = build_keywords_two_tier(must_k, nice_k, all_not_k, qualifiers=canonicalize(qual), min_must=min_must)
+                li_keywords = build_keywords_two_tier(must_k, nice_k, all_not_k, qualifiers=canonicalize(qual), min_must=2)
             else:
                 li_keywords = build_keywords(must_k, nice_k, all_not_k, qualifiers=canonicalize(qual))
             st.success("Applied trim/dedupe.")
@@ -613,6 +768,10 @@ if st.session_state.get("built"):
     lines.append("")
     lines.append("SKILLS (CSV):")
     lines.append(skills_all_csv)
+    if st.session_state.get("ai_notes"):
+        lines.append("")
+        lines.append("AI NOTES:")
+        lines.append(st.session_state.get("ai_notes"))
     pack_text = "\n".join(lines)
 
     # Assistant Panels
@@ -621,37 +780,16 @@ if st.session_state.get("built"):
 
     with tabs[0]:
         st.markdown("**What this shows:** quick context for the role, common responsibilities, and what *not* to target.")
-        if category == "ml":
-            st.markdown(
-                """
-- **Focus:** production ML (training → deployment), feature pipelines, model monitoring.
-- **Common stacks:** Python, PyTorch/TensorFlow, Airflow, MLflow/Feature Store, AWS/GCP.
-- **Avoid:** pure research-only profiles when you need prod ML; BI/marketing analysts.
-                """
-            )
-        elif category == "sre":
-            st.markdown(
-                """
-- **Focus:** reliability, incident response, infra as code, observability.
-- **Common stacks:** Kubernetes, Terraform, Prometheus/Grafana, Go/Python, AWS/GCP.
-- **Avoid:** Help Desk/IT support, QA-only.
-                """
-            )
-        else:
-            st.markdown(
-                """
-- **Focus:** building services and features, code quality, scalability.
-- **Common stacks:** Python/Java/Go, microservices, Docker/Kubernetes, AWS/GCP.
-- **Avoid:** QA-only, desktop support.
-                """
-            )
         st.markdown("**Title synonyms:**")
         st.code("\n".join(titles), language="text")
         st.markdown("**Top skills:**")
         st.code(", ".join(unique_preserve(must + nice)) or "python, java, go", language="text")
+        if st.session_state.get("ai_notes"):
+            st.markdown("**AI tips:**")
+            st.info(st.session_state["ai_notes"])
 
     with tabs[1]:
-        st.markdown("**What this shows:** quick levers to tighten or widen results based on signal strength.")
+        st.markdown("**What this shows:** levers to tighten or widen results.")
         st.markdown(
             """
 - Use **Title (Current)** first; if low volume, add **Title (Past)**.
@@ -687,7 +825,7 @@ if st.session_state.get("built"):
         st.markdown("**Tip:** If volume is high, add `current company = any` and rely on Titles + Keywords.")
 
     with tabs[4]:
-        st.markdown("**What this shows:** 2 short, friendly outreach drafts you can personalize and send fast.")
+        st.markdown("**What this shows:** 2 short outreach drafts you can personalize.")
         outreach_a = (
             f"""Subject: {st.session_state.get('role_title','')} impact at our team
 
@@ -757,4 +895,4 @@ We’re scaling {{team/product}}. Your experience across {', '.join(must[:5]) or
 
 # Final hint if user hasn't built yet
 if not st.session_state.get("built"):
-    st.info("Type a job title (try 'Staff Machine Learning Engineer'), pick a bright theme, then click **Build sourcing pack**.")
+    st.info("Type a job title (any role), optionally paste a JD in the AI section, pick a bright theme, then click **Build sourcing pack**.")
