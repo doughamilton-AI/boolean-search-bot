@@ -441,7 +441,7 @@ with col4:
 
 # Build
 if st.button("✨ Build sourcing pack") and (job_title or "").strip():
-    qp_set(title=job_title, loc=location, level=level, env=env, size=size, metro=metro, theme=theme_choice, not=st.session_state.get("extra_not", ""))
+    qp_set(**{"title": job_title, "loc": location, "level": level, "env": env, "size": size, "metro": metro, "theme": theme_choice, "not": st.session_state.get("extra_not", "")})
     st.session_state["built"] = True
     st.session_state["role_title"] = job_title
     st.session_state["location"] = location
