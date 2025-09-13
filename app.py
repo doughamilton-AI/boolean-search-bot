@@ -11,12 +11,12 @@ import streamlit as st
 
 try:
     from openai import OpenAI  # Official OpenAI SDK (v1+)
-except Exception:  # Optional import; app can still run without AI
-    OpenAI = None
+except Exception:
+    OpenAI = None  # App still works without AI; falls back to local heuristics
 
 st.set_page_config(page_title="AI Sourcing Assistant", layout="wide")
 
-# ============================ Role Library (fallback; used when AI is off/unavailable) ============================
+# ============================ Role Library (fallback when AI is off/unavailable) ============================
 ROLE_LIB: Dict[str, Dict[str, List[str]]] = {
     "swe": {
         "titles": [
@@ -115,7 +115,6 @@ SYNONYMS: Dict[str, str] = {
 }
 
 # ============================ Helpers ============================
-
 def unique_preserve(seq: List[str]) -> List[str]:
     seen, out = set(), []
     for x in seq:
@@ -128,7 +127,6 @@ def unique_preserve(seq: List[str]) -> List[str]:
             out.append(x2)
     return out
 
-
 def canonicalize(tokens: List[str]) -> List[str]:
     out, seen = [], set()
     for t in tokens:
@@ -139,33 +137,27 @@ def canonicalize(tokens: List[str]) -> List[str]:
             out.append(c)
     return out
 
-
 def normalize_quotes(s: str) -> str:
     return (s or "").replace("“", '"').replace("”", '"').replace("’", "'").replace("‘", "'")
-
 
 def safe_quote(token: str) -> str:
     t = normalize_quotes((token or "").strip())
     if not t:
         return ""
     t = t.replace('"', r'\"')  # escape embedded quotes
-    # quote if contains whitespace or parens/ops/hyphenated terms
     if re.search(r"\s|\(|\)|-", t):
         return f'"{t}"'
     return t
-
 
 def or_group(items: List[str]) -> str:
     toks = [safe_quote(i) for i in items if i and i.strip()]
     toks = unique_preserve([t for t in toks if t])
     return f"({ ' OR '.join(toks) })" if toks else ""
 
-
 def not_group(items: List[str]) -> str:
     toks = [safe_quote(i) for i in items if i and i.strip()]
     toks = unique_preserve([t for t in toks if t])
     return f"({ ' OR '.join(toks) })" if toks else ""
-
 
 def map_title_to_category(title: str) -> str:
     s = (title or "").lower()
@@ -178,7 +170,6 @@ def map_title_to_category(title: str) -> str:
         return "ml"
     return "swe"
 
-
 def expand_titles(base_titles: List[str], cat: str) -> List[str]:
     extra: List[str] = []
     if cat == "swe":
@@ -189,14 +180,12 @@ def expand_titles(base_titles: List[str], cat: str) -> List[str]:
         extra = ["Reliability Eng", "DevOps SRE", "Platform SRE", "Production Engineer"]
     return unique_preserve(base_titles + extra)
 
-
 def build_keywords(must: List[str], nice: List[str], nots: List[str], qualifiers: List[str] = None) -> str:
     core = or_group(unique_preserve(canonicalize(must) + canonicalize(nice) + canonicalize(qualifiers or [])))
     if not core:
         return ""
     ng = not_group(unique_preserve(canonicalize(nots)))
     return f"{core} NOT {ng}" if ng else core
-
 
 def build_keywords_two_tier(must: List[str], nice: List[str], nots: List[str], qualifiers: List[str] = None, min_must: int = 2) -> str:
     must = canonicalize(must)
@@ -206,7 +195,6 @@ def build_keywords_two_tier(must: List[str], nice: List[str], nots: List[str], q
     core = " AND ".join([p for p in [left, right] if p])
     ng = not_group(unique_preserve(canonicalize(nots)))
     return f"{core} NOT {ng}" if ng else core
-
 
 def jd_extract(jd_text: str) -> Tuple[List[str], List[str], List[str]]:
     jd = normalize_quotes((jd_text or "").lower())
@@ -223,7 +211,6 @@ def jd_extract(jd_text: str) -> Tuple[List[str], List[str], List[str]]:
     auto_not = [kw for kw in auto_not_terms if re.search(rf"\b{re.escape(kw)}\b", jd)]
     return must_ex, nice_ex, auto_not
 
-
 def string_health_report(s: str) -> List[str]:
     issues: List[str] = []
     if not s:
@@ -232,7 +219,6 @@ def string_health_report(s: str) -> List[str]:
         issues.append("Keywords look long (>900 chars); consider trimming.")
     if s.count(" OR ") > 80:
         issues.append("High OR count; remove niche/redundant terms.")
-    # Ignore quoted segments when checking parentheses balance
     unquoted = re.sub(r'"[^"]*"', "", s)
     depth = 0
     ok = True
@@ -248,7 +234,6 @@ def string_health_report(s: str) -> List[str]:
         issues.append("Unbalanced parentheses; copy fresh strings or simplify.")
     return issues
 
-
 def string_health_grade(s: str) -> str:
     if not s:
         return "F"
@@ -263,7 +248,6 @@ def string_health_grade(s: str) -> str:
     if any("Unbalanced parentheses" in x for x in string_health_report(s)):
         score -= 25
     return "A" if score >= 90 else "B" if score >= 80 else "C" if score >= 70 else "D" if score >= 60 else "E" if score >= 50 else "F"
-
 
 def apply_seniority(titles: List[str], level: str) -> List[str]:
     base = []
@@ -292,19 +276,22 @@ def apply_seniority(titles: List[str], level: str) -> List[str]:
     return res[:24]
 
 # ============================ AI Layer ============================
-MODEL_DEFAULT = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # configurable
+MODEL_DEFAULT = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
 @st.cache_data(show_spinner=False)
 def _ai_cached(title: str, location: str, jd_text: str, level: str, env: str, size: str, model: str) -> Dict[str, Any]:
-    """Cached wrapper so repeated edits don't re-call the API."""
     payload = ai_generate_role_pack(title, location, jd_text, level, env, size, model)
     return payload or {}
-
 
 def get_openai_client():
     if OpenAI is None:
         return None, "OpenAI SDK not installed. Add `openai` to requirements."
-    api_key = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY", None)
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        try:
+            api_key = st.secrets["OPENAI_API_KEY"]  # nicer error if missing
+        except Exception:
+            api_key = None
     if not api_key:
         return None, "Missing OPENAI_API_KEY (env var or st.secrets)."
     try:
@@ -312,7 +299,6 @@ def get_openai_client():
         return client, None
     except Exception as e:
         return None, f"OpenAI client error: {e}"
-
 
 def parse_json_safely(text: str) -> Dict[str, Any]:
     if not text:
@@ -322,20 +308,18 @@ def parse_json_safely(text: str) -> Dict[str, Any]:
     try:
         return json.loads(raw)
     except Exception:
-        # last resort: remove trailing commas
         raw2 = re.sub(r",\s*([}\]])", r"\1", raw)
         try:
             return json.loads(raw2)
         except Exception:
             return {}
 
-
 def call_llm_json(messages: List[Dict[str, str]], model: str = MODEL_DEFAULT) -> Dict[str, Any]:
     client, err = get_openai_client()
     if err:
         st.info(err)
         return {}
-    # Try Chat Completions with JSON mode; fallback to Responses API
+    # Chat Completions with JSON mode
     try:
         resp = client.chat.completions.create(
             model=model,
@@ -347,29 +331,25 @@ def call_llm_json(messages: List[Dict[str, str]], model: str = MODEL_DEFAULT) ->
         return parse_json_safely(txt)
     except Exception:
         pass
-    # Responses API fallback
+    # Responses API fallback (defensive)
     try:
-        # The Responses API accepts `input` with role messages as a list
         resp2 = client.responses.create(
             model=model,
             temperature=0.2,
             response_format={"type": "json_object"},
             input=[{"role": m.get("role", "user"), "content": m.get("content", "")} for m in messages],
         )
-        # Some SDK versions expose output_text; otherwise extract from content parts
         txt = getattr(resp2, "output_text", None)
         if not txt:
-            # Fallback extraction
             try:
                 parts = resp2.output[0].content  # type: ignore[attr-defined]
-                txt = "".join([p.text for p in parts if getattr(p, "type", "") == "output_text"])  # best-effort
+                txt = "".join([p.text for p in parts if getattr(p, "type", "") == "output_text"])
             except Exception:
                 txt = None
         return parse_json_safely(txt or "")
     except Exception as e:
         st.error(f"AI request failed: {e}")
         return {}
-
 
 def ai_generate_role_pack(title: str, location: str, jd_text: str, level: str, env: str, size: str, model: str) -> Dict[str, Any]:
     system = (
@@ -408,7 +388,6 @@ THEMES: Dict[str, Dict[str, str]] = {
     "Coral": {"grad": "linear-gradient(135deg, #FB7185 0%, #F59E0B 100%)", "bg": "#FFF7ED", "card": "#FFFFFF", "text": "#111827", "muted": "#6B7280", "ring": "#F97316", "button": "#F97316"},
     "Mint":  {"grad": "linear-gradient(135deg, #34D399 0%, #22D3EE 100%)", "bg": "#ECFEFF", "card": "#FFFFFF", "text": "#0F172A", "muted": "#334155", "ring": "#10B981", "button": "#10B981"},
 }
-
 
 def inject_css(theme_name: str) -> None:
     t = THEMES.get(theme_name, THEMES["Sky"])
@@ -485,7 +464,6 @@ def inject_css(theme_name: str) -> None:
     """
     st.markdown(css, unsafe_allow_html=True)
 
-
 def hero(job_title: str, category: str, location: str) -> None:
     st.markdown("<div class='hero'>", unsafe_allow_html=True)
     st.markdown("<h1>AI Sourcing Assistant</h1>", unsafe_allow_html=True)
@@ -500,7 +478,6 @@ def hero(job_title: str, category: str, location: str) -> None:
         st.markdown("<div class='chips'>" + "".join(chips) + "</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-
 def code_card(title: str, text: str, hint: str = "") -> None:
     st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.markdown("<h3 style='margin:0 0 6px 0;font-size:14px;color:var(--muted);'>" + title + "</h3>", unsafe_allow_html=True)
@@ -512,7 +489,6 @@ def code_card(title: str, text: str, hint: str = "") -> None:
 # ============================ URL State ============================
 qp = st.query_params
 
-
 def qp_get(name: str, default: str = "") -> str:
     val = qp.get(name, None)
     if val is None:
@@ -520,7 +496,6 @@ def qp_get(name: str, default: str = "") -> str:
     if isinstance(val, list):
         return val[0] if val else default
     return val or default
-
 
 def qp_set(**kwargs):
     for k, v in kwargs.items():
@@ -538,7 +513,7 @@ inject_css(theme_choice)
 st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
 left, right = st.columns([3, 2])
 with left:
-    job_title = st.text_input("Search by job title", value=qp_get("title", ""), placeholder="e.g., Staff Machine Learning Engineer")
+    job_title = st.text_input("Search by job title", value=qp_get("title", ""), placeholder="e.g., VP of Customer Success, Payroll Manager, Creative Director")
 with right:
     location = st.text_input("Location (optional)", value=qp_get("loc", ""), placeholder="e.g., New York, Remote, Bay Area")
 
@@ -594,14 +569,11 @@ if st.button("✨ Build sourcing pack") and (job_title or "").strip():
             ai = _ai_cached(job_title.strip(), location.strip(), st.session_state.get("jd_text_global", ""), level, env, size, model_name)
         if ai:
             st.session_state["category"] = (ai.get("role_category") or heuristic_cat or "other")
-            # Titles / skills / negatives / qualifiers
             titles_seed = unique_preserve((ai.get("titles") or []) + titles_seed)
             must_seed   = unique_preserve(ai.get("must_have") or must_seed)
             nice_seed   = unique_preserve(ai.get("nice_to_have") or nice_seed)
             not_seed    = unique_preserve((ai.get("negatives") or []) + not_seed)
-            # Companies
             companies_seed = unique_preserve((ai.get("target_companies") or []) + METRO_COMPANIES.get(metro, []))
-            # Helper notes
             st.session_state["ai_notes"] = ai.get("notes", "")
             st.toast("AI suggestions applied.")
         else:
@@ -627,7 +599,7 @@ if st.session_state.get("built"):
 
     st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
 
-    # Heuristic seniority from title
+    # Heuristic seniority from title text
     title_lower = (st.session_state.get("role_title", "") or "").lower()
     if any(w in title_lower for w in ["staff", "principal"]):
         level = "Staff/Principal"
@@ -641,7 +613,7 @@ if st.session_state.get("built"):
     c0, c1, c2 = st.columns([1, 1, 1])
     with c0:
         ic_only = st.checkbox("IC-only (exclude managers)", value=False, help="Adds NOT manager/director/head of")
-        use_two_tier = st.checkbox("Use must-have anchors (AND)", value=False, help="Require 1–2 anchors; everything else stays OR")
+        use_two_tier = st.checkbox("Use must-have anchors (AND)", value=False, help="Require 1–3 anchors; everything else stays OR")
         min_must = st.slider("Anchors count", min_value=1, max_value=3, value=2, disabled=not use_two_tier)
         env_size_as_keywords = st.checkbox("Also add env/size as keywords", value=False, help="When filters aren't available; may increase noise")
     with c1:
@@ -663,7 +635,7 @@ if st.session_state.get("built"):
             if n_not:
                 st.session_state["not_terms"] = unique_preserve(st.session_state.get("not_terms", []) + n_not); applied = True
             if applied:
-                st.session_state["must_text"] = ", ".join(st.session_state["must"])  # reflect in editor
+                st.session_state["must_text"] = ", ".join(st.session_state["must"])
                 st.session_state["nice_text"] = ", ".join(st.session_state["nice"])
                 st.success("JD terms applied to the editors.")
             else:
@@ -717,7 +689,7 @@ if st.session_state.get("built"):
     # Build strings
     li_title_current = or_group(titles)
     li_title_past = or_group(titles[: min(20, len(titles))])
-    li_keywords = build_keywords_two_tier(must, nice, all_not, qualifiers=qual, min_must=2) if use_two_tier else build_keywords(must, nice, all_not, qualifiers=qual)
+    li_keywords = build_keywords_two_tier(must, nice, all_not, qualifiers=qual, min_must=min_must) if use_two_tier else build_keywords(must, nice, all_not, qualifiers=qual)
     companies_or = or_group(companies)
     skills_all_csv = ", ".join(unique_preserve(must + nice))
 
@@ -731,7 +703,7 @@ if st.session_state.get("built"):
             nice_k = canonicalize(nice)[:8]
             all_not_k = canonicalize(all_not)[:10]
             if use_two_tier:
-                li_keywords = build_keywords_two_tier(must_k, nice_k, all_not_k, qualifiers=canonicalize(qual), min_must=2)
+                li_keywords = build_keywords_two_tier(must_k, nice_k, all_not_k, qualifiers=canonicalize(qual), min_must=min_must)
             else:
                 li_keywords = build_keywords(must_k, nice_k, all_not_k, qualifiers=canonicalize(qual))
             st.success("Applied trim/dedupe.")
@@ -789,7 +761,7 @@ if st.session_state.get("built"):
             st.info(st.session_state["ai_notes"])
 
     with tabs[1]:
-        st.markdown("**What this shows:** levers to tighten or widen results.")
+        st.markdown("**What this shows:** quick levers to tighten or widen results based on signal strength.")
         st.markdown(
             """
 - Use **Title (Current)** first; if low volume, add **Title (Past)**.
@@ -825,7 +797,7 @@ if st.session_state.get("built"):
         st.markdown("**Tip:** If volume is high, add `current company = any` and rely on Titles + Keywords.")
 
     with tabs[4]:
-        st.markdown("**What this shows:** 2 short outreach drafts you can personalize.")
+        st.markdown("**What this shows:** 2 short, friendly outreach drafts you can personalize and send fast.")
         outreach_a = (
             f"""Subject: {st.session_state.get('role_title','')} impact at our team
 
@@ -896,3 +868,4 @@ We’re scaling {{team/product}}. Your experience across {', '.join(must[:5]) or
 # Final hint if user hasn't built yet
 if not st.session_state.get("built"):
     st.info("Type a job title (any role), optionally paste a JD in the AI section, pick a bright theme, then click **Build sourcing pack**.")
+
