@@ -3,6 +3,7 @@
 # streamlit>=1.33
 
 import json
+import re
 from typing import List, Tuple, Dict
 import streamlit as st
 
@@ -107,6 +108,7 @@ SYNONYMS: Dict[str, str] = {
 }
 
 # ============================ Helpers ============================
+
 def unique_preserve(seq: List[str]) -> List[str]:
     seen, out = set(), []
     for x in seq:
@@ -119,6 +121,7 @@ def unique_preserve(seq: List[str]) -> List[str]:
             out.append(x2)
     return out
 
+
 def canonicalize(tokens: List[str]) -> List[str]:
     out, seen = [], set()
     for t in tokens:
@@ -129,25 +132,45 @@ def canonicalize(tokens: List[str]) -> List[str]:
             out.append(c)
     return out
 
-def or_group(items: List[str]) -> str:
-    items = [i.strip() for i in items if i and i.strip()]
-    if not items:
+
+def normalize_quotes(s: str) -> str:
+    return (s or "").replace("“", '"').replace("”", '"').replace("’", "'").replace("‘", "'")
+
+
+def safe_quote(token: str) -> str:
+    t = normalize_quotes((token or "").strip())
+    if not t:
         return ""
-    quoted = []
-    for i in items:
-        if " " in i and not i.startswith('"'):
-            quoted.append('"' + i + '"')
-        else:
-            quoted.append(i)
-    return "(" + " OR ".join(quoted) + ")"
+    t = t.replace('"', r'\"')  # escape embedded quotes
+    # quote if contains whitespace or parens/ops/hyphenated terms
+    if re.search(r"\s|\(|\)|-", t):
+        return f'"{t}"'
+    return t
+
+
+def or_group(items: List[str]) -> str:
+    toks = [safe_quote(i) for i in items if i and i.strip()]
+    toks = unique_preserve([t for t in toks if t])
+    return f"({ ' OR '.join(toks) })" if toks else ""
+
+
+def not_group(items: List[str]) -> str:
+    toks = [safe_quote(i) for i in items if i and i.strip()]
+    toks = unique_preserve([t for t in toks if t])
+    return f"({ ' OR '.join(toks) })" if toks else ""
+
 
 def map_title_to_category(title: str) -> str:
     s = (title or "").lower()
-    if any(t in s for t in ["sre", "site reliability", "reliab", "devops", "platform reliability"]):
+    if any(t in s for t in ["sre", "site reliability", "reliab", "devops", "platform reliability", "production engineer"]):
         return "sre"
-    if any(t in s for t in ["machine learning", "ml engineer", "applied scientist", "data scientist", "ai engineer", " ml ", "ml-", "ml/"]):
+    if any(t in s for t in [
+        "machine learning", "ml engineer", "applied scientist", "data scientist", "ai engineer",
+        "genai", "llm", "deep learning", " ml ", "ml-", "ml/"
+    ]):
         return "ml"
     return "swe"
+
 
 def expand_titles(base_titles: List[str], cat: str) -> List[str]:
     extra: List[str] = []
@@ -159,31 +182,40 @@ def expand_titles(base_titles: List[str], cat: str) -> List[str]:
         extra = ["Reliability Eng", "DevOps SRE", "Platform SRE", "Production Engineer"]
     return unique_preserve(base_titles + extra)
 
+
 def build_keywords(must: List[str], nice: List[str], nots: List[str], qualifiers: List[str] = None) -> str:
-    base = unique_preserve(must + nice + (qualifiers or []))
-    core = or_group(base)
+    core = or_group(unique_preserve(canonicalize(must) + canonicalize(nice) + canonicalize(qualifiers or [])))
     if not core:
         return ""
-    nots2 = unique_preserve(nots)
-    if not nots2:
-        return core
-    return core + " NOT (" + " OR ".join(nots2) + ")"
+    ng = not_group(unique_preserve(canonicalize(nots)))
+    return f"{core} NOT {ng}" if ng else core
+
+
+def build_keywords_two_tier(must: List[str], nice: List[str], nots: List[str], qualifiers: List[str] = None, min_must: int = 2) -> str:
+    must = canonicalize(must)
+    anchors, rest = must[:max(0, min_must)], must[max(0, min_must):]
+    left = " AND ".join(or_group([a]) for a in anchors) if anchors else ""
+    right = or_group(unique_preserve(rest + canonicalize(nice) + canonicalize(qualifiers or [])))
+    core = " AND ".join([p for p in [left, right] if p])
+    ng = not_group(unique_preserve(canonicalize(nots)))
+    return f"{core} NOT {ng}" if ng else core
+
 
 def jd_extract(jd_text: str) -> Tuple[List[str], List[str], List[str]]:
-    jd = (jd_text or "").lower()
-    pool = set()
-    for role in ROLE_LIB.values():
-        for s in role["must"] + role["nice"]:
-            pool.add(s.lower())
-    counts = {s: jd.count(s) for s in pool}
-    ranked = [s for s, c in sorted(counts.items(), key=lambda x: x[1], reverse=True) if c > 0]
-    must_ex = ranked[:8]
-    nice_ex = ranked[8:16]
-    auto_not = []
-    for kw in ["intern", "contract", "temporary", "help desk", "desktop support", "qa tester", "graphic designer"]:
-        if kw in jd:
-            auto_not.append(kw)
+    jd = normalize_quotes((jd_text or "").lower())
+    pool = {s.lower() for role in ROLE_LIB.values() for s in (role["must"] + role["nice"])}
+
+    def count_term(term: str) -> int:
+        if " " in term or "/" in term or "-" in term:
+            return jd.count(term)
+        return len(re.findall(rf"\b{re.escape(term)}\b", jd))
+
+    ranked = [t for t in sorted(pool, key=lambda x: count_term(x), reverse=True) if count_term(t) > 0]
+    must_ex, nice_ex = ranked[:8], ranked[8:16]
+    auto_not_terms = ["intern", "contract", "temporary", "help desk", "desktop support", "qa tester", "graphic designer"]
+    auto_not = [kw for kw in auto_not_terms if re.search(rf"\b{re.escape(kw)}\b", jd)]
     return must_ex, nice_ex, auto_not
+
 
 def string_health_report(s: str) -> List[str]:
     issues: List[str] = []
@@ -193,9 +225,11 @@ def string_health_report(s: str) -> List[str]:
         issues.append("Keywords look long (>900 chars); consider trimming.")
     if s.count(" OR ") > 80:
         issues.append("High OR count; remove niche/redundant terms.")
+    # Ignore quoted segments when checking parentheses balance
+    unquoted = re.sub(r'"[^"]*"', "", s)
     depth = 0
     ok = True
-    for ch in s:
+    for ch in unquoted:
         if ch == "(":
             depth += 1
         elif ch == ")":
@@ -206,6 +240,7 @@ def string_health_report(s: str) -> List[str]:
     if depth != 0 or not ok:
         issues.append("Unbalanced parentheses; copy fresh strings or simplify.")
     return issues
+
 
 def string_health_grade(s: str) -> str:
     if not s:
@@ -221,6 +256,7 @@ def string_health_grade(s: str) -> str:
     if any("Unbalanced parentheses" in x for x in string_health_report(s)):
         score -= 25
     return "A" if score >= 90 else "B" if score >= 80 else "C" if score >= 70 else "D" if score >= 60 else "E" if score >= 50 else "F"
+
 
 def apply_seniority(titles: List[str], level: str) -> List[str]:
     base = []
@@ -254,6 +290,7 @@ THEMES: Dict[str, Dict[str, str]] = {
     "Coral": {"grad": "linear-gradient(135deg, #FB7185 0%, #F59E0B 100%)", "bg": "#FFF7ED", "card": "#FFFFFF", "text": "#111827", "muted": "#6B7280", "ring": "#F97316", "button": "#F97316"},
     "Mint":  {"grad": "linear-gradient(135deg, #34D399 0%, #22D3EE 100%)", "bg": "#ECFEFF", "card": "#FFFFFF", "text": "#0F172A", "muted": "#334155", "ring": "#10B981", "button": "#10B981"},
 }
+
 
 def inject_css(theme_name: str) -> None:
     t = THEMES.get(theme_name, THEMES["Sky"])
@@ -330,6 +367,7 @@ def inject_css(theme_name: str) -> None:
     """
     st.markdown(css, unsafe_allow_html=True)
 
+
 def hero(job_title: str, category: str, location: str) -> None:
     st.markdown("<div class='hero'>", unsafe_allow_html=True)
     st.markdown("<h1>AI Sourcing Assistant</h1>", unsafe_allow_html=True)
@@ -344,6 +382,7 @@ def hero(job_title: str, category: str, location: str) -> None:
         st.markdown("<div class='chips'>" + "".join(chips) + "</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
+
 def code_card(title: str, text: str, hint: str = "") -> None:
     st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.markdown("<h3 style='margin:0 0 6px 0;font-size:14px;color:var(--muted);'>" + title + "</h3>", unsafe_allow_html=True)
@@ -355,6 +394,7 @@ def code_card(title: str, text: str, hint: str = "") -> None:
 # ============================ URL State ============================
 qp = st.query_params
 
+
 def qp_get(name: str, default: str = "") -> str:
     val = qp.get(name, None)
     if val is None:
@@ -362,6 +402,7 @@ def qp_get(name: str, default: str = "") -> str:
     if isinstance(val, list):
         return val[0] if val else default
     return val or default
+
 
 def qp_set(**kwargs):
     for k, v in kwargs.items():
@@ -383,7 +424,7 @@ with left:
 with right:
     location = st.text_input("Location (optional)", value=qp_get("loc", ""), placeholder="e.g., New York, Remote, Bay Area")
 
-extra_not = st.text_input("Extra NOT terms (comma-separated, optional)", value=qp_get("not", ""), placeholder="e.g., contractor, internship")
+extra_not = st.text_input("Extra NOT terms (comma-separated, optional)", value=qp_get("not", ""), placeholder="e.g., contractor, internship", key="extra_not")
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:
@@ -400,7 +441,7 @@ with col4:
 
 # Build
 if st.button("✨ Build sourcing pack") and (job_title or "").strip():
-    qp_set(title=job_title, loc=location, level=level, env=env, size=size, metro=metro, theme=theme_choice)
+    qp_set(title=job_title, loc=location, level=level, env=env, size=size, metro=metro, theme=theme_choice, not=st.session_state.get("extra_not", ""))
     st.session_state["built"] = True
     st.session_state["role_title"] = job_title
     st.session_state["location"] = location
@@ -428,7 +469,7 @@ if st.session_state.get("built"):
 
     st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
 
-    # Heuristic seniority
+    # Heuristic seniority from title
     title_lower = (st.session_state.get("role_title", "") or "").lower()
     if any(w in title_lower for w in ["staff", "principal"]):
         level = "Staff/Principal"
@@ -437,40 +478,44 @@ if st.session_state.get("built"):
 
     titles = apply_seniority(titles, level)
 
-    # Editors
+    # Editors + advanced controls
     st.subheader("✏️ Customize")
-    c1, c2 = st.columns([1, 1])
+    c0, c1, c2 = st.columns([1, 1, 1])
+    with c0:
+        ic_only = st.checkbox("IC-only (exclude managers)", value=False, help="Adds NOT manager/director/head of")
+        use_two_tier = st.checkbox("Use must-have anchors (AND)", value=False, help="Require 1–2 anchors; everything else stays OR")
+        min_must = st.slider("Anchors count", min_value=1, max_value=3, value=2, disabled=not use_two_tier)
+        env_size_as_keywords = st.checkbox("Also add env/size as keywords", value=False, help="When filters aren't available; may increase noise")
     with c1:
-        titles_default = "\n".join(titles)
-        titles_text = st.text_area("Titles (one per line)", value=titles_default, height=180)
+        titles_text = st.text_area("Titles (one per line)", value="\n".join(titles), height=180, key="titles_text")
     with c2:
-        must_default = ", ".join(must)
-        must_text = st.text_area("Must-have skills (comma-separated)", value=must_default, height=120)
-        nice_default = ", ".join(nice)
-        nice_text = st.text_area("Nice-to-have skills (comma-separated)", value=nice_default, height=120)
+        must_text = st.text_area("Must-have skills (comma-separated)", value=", ".join(must), height=120, key="must_text")
+        nice_text = st.text_area("Nice-to-have skills (comma-separated)", value=", ".join(nice), height=120, key="nice_text")
 
     # JD extraction (optional)
     with st.expander("📄 Paste JD → Auto-extract (optional)"):
-        jd = st.text_area("Paste JD (optional)", height=160)
+        jd = st.text_area("Paste JD (optional)", height=160, key="jd_text")
         if st.button("Extract from JD"):
             m_ex, n_ex, n_not = jd_extract(jd)
             applied = False
             if m_ex:
-                must = unique_preserve(m_ex + must); applied = True
+                st.session_state["must"] = unique_preserve(st.session_state.get("must", []) + m_ex); applied = True
             if n_ex:
-                nice = unique_preserve(n_ex + nice); applied = True
+                st.session_state["nice"] = unique_preserve(st.session_state.get("nice", []) + n_ex); applied = True
             if n_not:
-                base_not = unique_preserve(base_not + n_not); applied = True
+                st.session_state["not_terms"] = unique_preserve(st.session_state.get("not_terms", []) + n_not); applied = True
             if applied:
-                st.success("JD terms applied.")
+                st.session_state["must_text"] = ", ".join(st.session_state["must"])  # reflect in editor
+                st.session_state["nice_text"] = ", ".join(st.session_state["nice"])
+                st.success("JD terms applied to the editors.")
             else:
                 st.info("No strong matches found.")
 
     # Apply user edits
     if st.button("Apply changes"):
-        titles = [t.strip() for t in titles_text.splitlines() if t.strip()]
-        must = [s.strip() for s in must_text.split(",") if s.strip()]
-        nice = [s.strip() for s in nice_text.split(",") if s.strip()]
+        titles = [t.strip() for t in st.session_state.get("titles_text", "").splitlines() if t.strip()]
+        must = [s.strip() for s in st.session_state.get("must_text", "").split(",") if s.strip()]
+        nice = [s.strip() for s in st.session_state.get("nice_text", "").split(",") if s.strip()]
         st.session_state["titles"], st.session_state["must"], st.session_state["nice"] = titles, must, nice
 
     # Companies
@@ -489,26 +534,35 @@ if st.session_state.get("built"):
 
     # Qualifiers (in Keywords)
     qual = []
-    if env == "Remote":
-        qual.append("remote")
-    elif env == "Hybrid":
-        qual.append("hybrid")
-    elif env == "On-site":
-        qual.append("on-site")
-    if size == "Startup":
-        qual.append("startup")
-    elif size == "Growth":
-        qual.append("scale-up")
-    elif size == "Enterprise":
-        qual.append("enterprise")
-    qual += ["highly scalable", "high throughput"]
+    if env_size_as_keywords:
+        if env == "Remote":
+            qual.append("remote")
+        elif env == "Hybrid":
+            qual.append("hybrid")
+        elif env == "On-site":
+            qual.append("on-site")
+        if size == "Startup":
+            qual.append("startup")
+        elif size == "Growth":
+            qual.append("scale-up")
+        elif size == "Enterprise":
+            qual.append("enterprise")
+        # performance modifiers (optional flavor)
+        qual += ["highly scalable", "high throughput"]
+
+    # Build NOT list (IC-only optional)
+    extra_not_list = [t.strip() for t in (st.session_state.get("extra_not", "") or "").split(",") if t.strip()]
+    all_not = unique_preserve(base_not + extra_not_list)
+    if ic_only:
+        all_not = unique_preserve(all_not + ["manager", "director", "head of"])
 
     # Build strings
-    extra_not_list = [t.strip() for t in (extra_not or "").split(",") if t.strip()]
-    all_not = unique_preserve(base_not + extra_not_list)
     li_title_current = or_group(titles)
     li_title_past = or_group(titles[: min(20, len(titles))])
-    li_keywords = build_keywords(canonicalize(must), canonicalize(nice), canonicalize(all_not), qualifiers=canonicalize(qual))
+    if use_two_tier:
+        li_keywords = build_keywords_two_tier(must, nice, all_not, qualifiers=qual, min_must=min_must)
+    else:
+        li_keywords = build_keywords(must, nice, all_not, qualifiers=qual)
     companies_or = or_group(companies)
     skills_all_csv = ", ".join(unique_preserve(must + nice))
 
@@ -521,7 +575,10 @@ if st.session_state.get("built"):
             must_k = canonicalize(must)[:12]
             nice_k = canonicalize(nice)[:8]
             all_not_k = canonicalize(all_not)[:10]
-            li_keywords = build_keywords(must_k, nice_k, all_not_k, qualifiers=canonicalize(qual))
+            if use_two_tier:
+                li_keywords = build_keywords_two_tier(must_k, nice_k, all_not_k, qualifiers=canonicalize(qual), min_must=min_must)
+            else:
+                li_keywords = build_keywords(must_k, nice_k, all_not_k, qualifiers=canonicalize(qual))
             st.success("Applied trim/dedupe.")
     else:
         st.success("✅ String looks healthy (" + grade + ") and ready to paste into LinkedIn.")
@@ -624,6 +681,8 @@ if st.session_state.get("built"):
             filt.append(f"Company size: {size}")
         if location:
             filt.append(f"Location: {location}")
+        if ic_only:
+            filt.append("Exclude managers: ON (NOT manager/director/head of)")
         st.write(filt or ["Seniority: Any", "Company size: Any"])
         st.markdown("**Tip:** If volume is high, add `current company = any` and rely on Titles + Keywords.")
 
@@ -665,7 +724,7 @@ We’re scaling {{team/product}}. Your experience across {', '.join(must[:5]) or
     st.subheader("⬇️ Export")
     st.download_button("Download pack (.txt)", data=pack_text, file_name="sourcing_pack.txt")
 
-    # Sticky Copy Bar
+    # Sticky Copy Bar (with fallback if navigator.clipboard is unavailable)
     def js_escape(s: str) -> str:
         try:
             return json.dumps(s or "")
@@ -674,12 +733,27 @@ We’re scaling {{team/product}}. Your experience across {', '.join(must[:5]) or
 
     html = []
     html.append("<div class='sticky'>")
-    html.append("<button class='btn' onclick=\"navigator.clipboard.writeText(" + js_escape(li_title_current) + ")\">Copy Title(Current)</button>")
-    html.append("<button class='btn' onclick=\"navigator.clipboard.writeText(" + js_escape(li_title_past) + ")\">Copy Title(Past)</button>")
-    html.append("<button class='btn' onclick=\"navigator.clipboard.writeText(" + js_escape(li_keywords) + ")\">Copy Keywords</button>")
-    html.append("<button class='btn' onclick=\"navigator.clipboard.writeText(" + js_escape(companies_or) + ")\">Copy Companies</button>")
+    html.append("""
+    <script>
+      function fallbackCopy(text){
+        const ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); } catch(e) {}
+        document.body.removeChild(ta);
+      }
+      async function copyText(t){
+        try{ if(navigator.clipboard){ await navigator.clipboard.writeText(t); }
+              else { fallbackCopy(t); } }
+        catch(e){ fallbackCopy(t); }
+      }
+    </script>
+    """)
+    html.append("<button class='btn' onclick=\"copyText(" + js_escape(li_title_current) + ")\">Copy Title(Current)</button>")
+    html.append("<button class='btn' onclick=\"copyText(" + js_escape(li_title_past) + ")\">Copy Title(Past)</button>")
+    html.append("<button class='btn' onclick=\"copyText(" + js_escape(li_keywords) + ")\">Copy Keywords</button>")
+    html.append("<button class='btn' onclick=\"copyText(" + js_escape(companies_or) + ")\">Copy Companies</button>")
     html.append("</div>")
-    st.components.v1.html("".join(html), height=70)
+    st.components.v1.html("".join(html), height=90)
 
 # Final hint if user hasn't built yet
 if not st.session_state.get("built"):
